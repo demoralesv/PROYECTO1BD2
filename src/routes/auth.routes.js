@@ -1,0 +1,1 @@
+//Aqui van a ir los routes, basicamente la logica de las rutas, lo mismo que está en index.js pero para que quede mas ordenado
