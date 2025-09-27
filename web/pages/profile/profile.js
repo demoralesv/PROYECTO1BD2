@@ -112,7 +112,7 @@ const profile = () => {
           </div>
           <div class="divider"></div>
           <div class="kv">
-            <span class="muted">Files</span><span id="statFiles">0</span>
+            <span class="muted">Datasets</span><span id="statFiles">0</span>
             <span class="muted">Followers</span><span id="statFollowers">0</span>
             <span class="muted">Following</span><span id="statFollowing">0</span>
           </div>
