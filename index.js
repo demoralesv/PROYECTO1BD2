@@ -7,6 +7,7 @@ import User from "./src/models/User.js";
 import login from "./web/pages/login/login.js";
 import signup from "./web/pages/signup/signup.js";
 import connectDB from "./src/databases/mongo.js";
+import { initCassandra, cassandraClient } from "./src/databases/cassandra.js";
 
 dotenv.config();
 
@@ -17,6 +18,7 @@ app.use(express.static("pages"));
 app.use(express.json());
 
 connectDB();
+await initCassandra();
 
 // rutas, definen que hace cuando se le agrega /algo a la url
 // Home = login
@@ -26,6 +28,10 @@ app.get("/", (req, res) => {
 // Signup
 app.get("/signup", (req, res) => {
   res.send(signup());
+});
+
+app.get("/nombreDeFuncion", (req, res) => {
+  res.send(nombreDeFuncion());
 });
 
 // Login
