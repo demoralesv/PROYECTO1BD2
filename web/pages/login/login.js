@@ -57,6 +57,10 @@ const login = () => {
             setMsg("li_msg", "Login OK ✔", true);
             localStorage.setItem("token", data.token);
             document.getElementById("token").textContent = \`JWT: \${data.token.slice(0,32)}...\`;
+            
+            localStorage.setItem("token", data.token);
+            window.location.href = "/profile";
+
           }catch(e){
             setMsg("li_msg", e.message);
           }

@@ -6,7 +6,9 @@ import jwt from "jsonwebtoken";
 import User from "./src/models/User.js";
 import login from "./web/pages/login/login.js";
 import signup from "./web/pages/signup/signup.js";
+import profile from "./web/pages/profile/profile.js";
 import connectDB from "./src/databases/mongo.js";
+import { verifyToken } from "./src/routes/auth.routes.js";
 import { initCassandra, cassandraClient } from "./src/databases/cassandra.js";
 
 dotenv.config();
@@ -28,6 +30,10 @@ app.get("/", (req, res) => {
 // Signup
 app.get("/signup", (req, res) => {
   res.send(signup());
+});
+// Perfil del usuario
+app.get("/profile", (req, res) => {
+  res.send(profile());
 });
 
 app.get("/nombreDeFuncion", (req, res) => {
@@ -59,22 +65,43 @@ app.post("/auth/login", async (req, res) => {
 //signup
 app.post("/auth/signup", async (req, res) => {
   try {
-    const { username, password, fullname, birthDate, avatarUrl  } = req.body;
-    if (!username || !password) return res.status(400).json({ error: "Please fill all fields" });
+    const { username, password, fullname, birthDate, avatarUrl } = req.body;
+    if (!username || !password)
+      return res.status(400).json({ error: "Please fill all fields" });
 
     const existing = await User.findOne({ username });
-    if (existing) return res.status(400).json({ error: "Username not available" });
+    if (existing)
+      return res.status(400).json({ error: "Username not available" });
 
     const hashedPassword = await bcrypt.hash(password, 10);
-    const user = new User({ 
-      username, 
+    const user = new User({
+      username,
       password: hashedPassword,
       fullname,
       birthDate,
-      avatarUrl });
+      avatarUrl,
+    });
     await user.save();
 
     res.json({ msg: "User Created✅" });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// Info del usuario que ya ingresó
+app.get("/me", verifyToken, async (req, res) => {
+  try {
+    const user = await User.findById(req.userId).lean();
+    if (!user) return res.status(404).json({ error: "User not found" });
+
+    res.json({
+      username: user.username,
+      fullName: user.fullname,
+      dob: user.birthDate || null,
+      avatarUrl: user.avatarUrl || null,
+      stats: { files: 0, followers: 0, following: 0 }, // por ahora no están
+    });
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
