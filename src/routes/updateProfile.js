@@ -28,10 +28,10 @@ router.patch("/me", verifyToken, async (req, res) => {
       } else {
         const d = new Date(body.dob);
         if (isNaN(d.getTime())) {
-          return res.status(400).json({ error: "dob inválido" });
+          return res.status(400).json({ error: "Invalid DOB" });
         }
         if (d > new Date()) {
-          return res.status(400).json({ error: "dob en el futuro no permitido" });
+          return res.status(400).json({ error: "Future DOB not allowed" });
         }
         updates.birthDate = d;
       }
@@ -43,7 +43,7 @@ router.patch("/me", verifyToken, async (req, res) => {
       } else if (/^https?:\/\//i.test(body.avatarUrl)) {
         updates.avatarUrl = body.avatarUrl.trim();
       } else {
-        return res.status(400).json({ error: "avatarUrl debe ser una URL http/https." });
+        return res.status(400).json({ error: "Avatar must be a public URL" });
       }
     }
 

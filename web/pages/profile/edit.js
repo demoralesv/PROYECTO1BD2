@@ -85,7 +85,7 @@ const profileEditPage = () => {
           <div class="content">
             <div class="row" style="align-items:center">
               <img id="avatarPreview" class="avatar" alt="avatar preview" src="">
-              <div class="help">La vista previa se actualiza al cambiar el nombre o la URL del avatar.</div>
+              <div class="help">Change the avatar url to preview.</div>
             </div>
 
             <div class="form" style="margin-top:12px">
@@ -103,7 +103,7 @@ const profileEditPage = () => {
               <div class="field">
                 <label for="avatarUrlInput">Avatar URL</label>
                 <input id="avatarUrlInput" class="input" placeholder="https://..." inputmode="url" />
-                <div class="help">Usa una URL pública (https). Déjala vacía para usar iniciales.</div>
+                <div class="help">Use a public URL. Let empty to use initials.</div>
               </div>
 
               <div class="field">
@@ -222,12 +222,12 @@ const profileEditPage = () => {
             var dob  = $("dobInput").value;
             var url  = $("avatarUrlInput").value.trim();
 
-            if (!name) return { ok:false, error:"El nombre no puede estar vacío." };
-            if (url && !/^https?:\\/\\//i.test(url)) return { ok:false, error:"El avatar debe ser una URL http/https." };
+            if (!name) return { ok:false, error:"Name can't be empty!" };
+            if (url && !/^https?:\\/\\//i.test(url)) return { ok:false, error:"Avatar must be a public URL!" };
             if (dob){
               var d = new Date(dob);
-              if (isNaN(d.getTime())) return { ok:false, error:"La fecha de nacimiento no es válida." };
-              if (d > new Date()) return { ok:false, error:"La fecha de nacimiento no puede ser futura." };
+              if (isNaN(d.getTime())) return { ok:false, error:"Date of Birth not valid!" };
+              if (d > new Date()) return { ok:false, error:"Date of birth cannot be in the future" };
             }
             return { ok:true, data:{ fullName:name, dob: dob || null, avatarUrl: url || null } };
           }
@@ -245,7 +245,6 @@ const profileEditPage = () => {
             try{
               const updated = await updateMe(v.data);
               showOk("Perfil actualizado.");
-              // pequeña pausa visual y volvemos al perfil
               setTimeout(function(){ window.location.href = "/profile"; }, 600);
             }catch(e){
               showErr(e.message || "No se pudo actualizar el perfil.");
