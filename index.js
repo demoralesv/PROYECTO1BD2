@@ -13,6 +13,8 @@ import datasetView from "./web/pages/Datasets/Details/details.js";
 import connectDB from "./src/databases/mongo.js";
 import { verifyToken } from "./src/routes/auth.routes.js";
 import { initCassandra, cassandraClient } from "./src/databases/cassandra.js";
+import redisClient from "./src/databases/redis.js";
+import connectNeo from "./src/databases/neo4j.js";
 
 dotenv.config();
 
@@ -23,8 +25,9 @@ app.use(express.static("pages"));
 app.use(express.json());
 
 connectDB();
-//await initCassandra();
-
+await initCassandra();
+connectNeo();
+//Redis se conecta solo al iniciar el proyecto
 // rutas, definen que hace cuando se le agrega /algo a la url
 // Home = login
 app.get("/", (req, res) => {
