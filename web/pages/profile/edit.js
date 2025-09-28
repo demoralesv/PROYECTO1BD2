@@ -244,10 +244,10 @@ const profileEditPage = () => {
 
             try{
               const updated = await updateMe(v.data);
-              showOk("Perfil actualizado.");
+              showOk("Profile updated successfully!");
               setTimeout(function(){ window.location.href = "/profile"; }, 600);
             }catch(e){
-              showErr(e.message || "No se pudo actualizar el perfil.");
+              showErr(e.message || "Cannot update profile.");
               setStatus("");
             }finally{
               $("btnSave").disabled = false;
@@ -268,7 +268,7 @@ const profileEditPage = () => {
             setStatus("");
           }).catch(function(e){
             setStatus("");
-            showErr(e.message || "No se pudo cargar el perfil.");
+            showErr(e.message || "Could not load profile.");
           });
         })();
       </script>
