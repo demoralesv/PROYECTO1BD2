@@ -8,7 +8,8 @@ import Dataset from "./src/models/Dataset.js";
 import login from "./web/pages/login/login.js";
 import signup from "./web/pages/signup/signup.js";
 import profile from "./web/pages/profile/profile.js";
-import createDataset from "./web/pages/createDataset/createDataset.js";
+import createDataset from "./web/pages/Datasets/createDataset/createDataset.js";
+import datasetView from "./web/pages/Datasets/Details/details.js";
 import connectDB from "./src/databases/mongo.js";
 import { verifyToken } from "./src/routes/auth.routes.js";
 import { initCassandra, cassandraClient } from "./src/databases/cassandra.js";
@@ -40,6 +41,10 @@ app.get("/profile", (req, res) => {
 // Crear un dataset
 app.get("/datasets/new", (req, res) => {
   res.send(createDataset());
+});
+// Info de un dataset
+app.get("/datasets/:id", (req, res) => {
+  res.send(datasetView());
 });
 
 app.get("/nombreDeFuncion", (req, res) => {
@@ -147,6 +152,75 @@ app.get("/me", verifyToken, async (req, res) => {
     });
   } catch (err) {
     res.status(500).json({ error: err.message });
+  }
+});
+// Obtener los datasets del usuario
+app.get("/datasets", verifyToken, async (req, res) => {
+  try {
+    const { mine } = req.query;
+    const filter = mine ? { owner: req.userId } : {};
+    const items = await Dataset.find(filter).sort({ createdAt: -1 }).lean();
+
+    const result = items.map((d) => ({
+      id: d._id,
+      datasetId: d.datasetId,
+      name: d.name,
+      description: d.description,
+      votes: d.votes ?? 0,
+      updatedAt: d.updatedAt,
+    }));
+
+    res.json({ items: result, total: result.length });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+// Obtener info de un dataset
+app.get("/api/datasets/:id", verifyToken, async (req, res) => {
+  try {
+    const { id } = req.params;
+
+    // 1) Buscar por ID dado
+    let ds = await Dataset.findOne({ datasetId: id })
+      .populate({
+        path: "owner",
+        select: "username fullname fullName avatarUrl",
+      })
+      .lean();
+
+    // 2) Si no lo encuentra, buscar por ID de objeto
+    if (!ds && mongoose.isValidObjectId(id)) {
+      ds = await Dataset.findById(id)
+        .populate({
+          path: "owner",
+          select: "username fullname fullName avatarUrl",
+        })
+        .lean();
+    }
+
+    if (!ds) return res.status(404).json({ error: "Dataset not found" });
+
+    res.json({
+      id: String(ds._id),
+      datasetId: ds.datasetId || String(ds._id),
+      name: ds.name,
+      description: ds.description,
+      datasetAvatarUrl: ds.datasetAvatarUrl || null,
+      owner: ds.owner
+        ? {
+            id: String(ds.owner._id),
+            username: ds.owner.username || "",
+            fullName: ds.owner.fullname || ds.owner.fullName || "",
+            avatarUrl: ds.owner.avatarUrl || null,
+          }
+        : null,
+      files: [], // Ahorita no hay
+      videos: [], // Ahorita no hay
+      createdAt: ds.createdAt,
+      updatedAt: ds.updatedAt,
+    });
+  } catch (e) {
+    res.status(500).json({ error: e.message });
   }
 });
 

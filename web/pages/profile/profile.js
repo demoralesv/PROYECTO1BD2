@@ -42,6 +42,7 @@ const profile = () => {
         .page{
           max-width:1200px; margin:24px auto; padding:0 16px;
           display:grid; grid-template-columns:320px 1fr; gap:18px;
+          align-items: start;
         }
         @media (max-width: 900px){
           .page{grid-template-columns:1fr}
@@ -146,76 +147,126 @@ const profile = () => {
           </table>
         </section>
       </main>
-
       <script>
-        (function(){
+        (function () {
           var API = "http://localhost:3000";
 
+          // funciones de ayuda
+          function $(id){ return document.getElementById(id); }
+          function setText(id, text){
+            var el = $(id);
+            if (el) el.textContent = text;
+          }
           function authHeaders(){
             var t = localStorage.getItem("token");
             return t ? { "Authorization": "Bearer " + t } : {};
           }
-
           function ensureTokenOrRedirect(){
-            if(!localStorage.getItem("token")){
+            if (!localStorage.getItem("token")) {
               window.location.replace("/");
             }
           }
-
-          function setText(id, text){
-            var el = document.getElementById(id);
-            if(el) el.textContent = text;
-          }
-          function $(id){ return document.getElementById(id); }
-
           function apiGet(path){
-            return fetch(API + path, { headers: Object.assign({ "Content-Type":"application/json" }, authHeaders()) })
-              .then(function(res){
-                if(!res.ok){
-                  return res.json().catch(function(){ return {}; }).then(function(data){
-                    throw new Error(data.error || (res.status + " " + res.statusText));
-                  });
-                }
-                return res.json();
-              });
+            return fetch(API + path, {
+              headers: Object.assign({ "Content-Type":"application/json" }, authHeaders())
+            }).then(function(res){
+              if (!res.ok) {
+                return res.json().catch(function(){return {};})
+                  .then(function(data){ throw new Error(data.error || (res.status + " " + res.statusText)); });
+              }
+              return res.json();
+            });
+          }
+          function fmtDateISO(s){
+            if (!s) return "—";
+            var d = new Date(s);
+            // ISO (yyyy-mm-dd)
+            return d.toISOString().split("T")[0];
           }
 
-          function fmtDate(s) {
-            if (!s) return "—";
-            const d = new Date(s);
-            return d.toISOString().split("T")[0];
-           }
-
+          // funciones para la interfaz
           function renderProfile(p){
-            var avatar = p && p.avatarUrl ? p.avatarUrl
+            var avatar = (p && p.avatarUrl)
+              ? p.avatarUrl
               : "https://api.dicebear.com/8.x/initials/svg?seed=" + encodeURIComponent((p && (p.fullName || p.username)) || "User");
             $("avatar").src = avatar;
             setText("fullName", (p && p.fullName) || "—");
-            setText("username", p && p.username ? "@"+p.username : "—");
-            setText("dob", "Birth date: " + (p && p.dob ? fmtDate(p.dob) : "—"));
-            setText("statFiles", 0);
-            setText("statFollowers", 0);
-            setText("statFollowing", 0);
+            setText("username", p && p.username ? "@" + p.username : "—");
+            setText("dob", "Birth date: " + (p && p.dob ? fmtDateISO(p.dob) : "—"));
           }
 
+          function renderDatasets(items){
+            var tbody = $("filesBody");
+            tbody.innerHTML = "";
+
+            if (!items || items.length === 0) {
+              var trEmpty = document.createElement("tr");
+              trEmpty.className = "empty-row";
+              trEmpty.innerHTML = '<td colspan="3">No datasets yet</td>';
+              tbody.appendChild(trEmpty);
+              return;
+            }
+
+            items.forEach(function(ds){
+              var tr = document.createElement("tr");
+              tr.innerHTML =
+                '<td class="col-name">' +
+                  '<div style="display:flex; gap:10px; align-items:center">' +
+                    '<div class="file-icon"></div>' +
+                    '<div>' +
+                      '<div style="font-weight:600">' + (ds.name || "Untitled dataset") + '</div>' +
+                      '<div class="muted" style="font-size:.85rem">' +
+                        new Date(ds.updatedAt || Date.now()).toLocaleString() +
+                      '</div>' +
+                    '</div>' +
+                  '</div>' +
+                '</td>' +
+                '<td class="col-votes">' + (ds.votes != null ? ds.votes : 0) + '</td>' +
+                '<td class="col-actions">' +
+                  '<button class="btn sm" data-id="' + (ds.datasetId || ds.id) + '" data-action="view">View</button> ' +
+                  '<button class="btn sm" data-id="' + (ds.datasetId || ds.id) + '" data-action="delete" disabled>Delete</button>' +
+                '</td>';
+              tbody.appendChild(tr);
+            });
+
+            // Botones de "View"
+            Array.prototype.forEach.call(
+              tbody.querySelectorAll('button[data-action="view"]'),
+              function(btn){
+                btn.addEventListener("click", function(){
+                  var id = btn.getAttribute("data-id");
+                  window.location.href = "/datasets/" + encodeURIComponent(id);
+                });
+              }
+            );
+          }
+
+          // Cargar los datos
           function loadAll(){
             setText("status", "Loading…");
-            // Only fetch the profile for now
-            apiGet("/me")
-              .then(function(me){
-                renderProfile(me);
-                setText("status", "");
-              })
-              .catch(function(e){
-                setText("status", e.message);
-              });
+            Promise.all([
+              apiGet("/me"),
+              apiGet("/datasets?mine=true")
+            ])
+            .then(function(arr){
+              var me = arr[0];
+              var ds = arr[1];
+              renderProfile(me);
+              renderDatasets((ds && ds.items) || []);
+              // update left-side count if you show it
+              setText("statFiles", (ds && (ds.total != null ? ds.total : (ds.items ? ds.items.length : 0))) || 0);
+              setText("status", "");
+            })
+            .catch(function(err){
+              setText("status", err.message);
+              renderDatasets([]);
+            });
           }
 
+          // Acciones de la barra superior
           $("btnAddDataset").addEventListener("click", function(){
             window.location.href = "/datasets/new";
           });
-
-          // Mostrar barra de arriba
           $("btnMessages").addEventListener("click", function(){
             window.location.href = "/messages.html";
           });
@@ -223,17 +274,17 @@ const profile = () => {
             loadAll();
           });
           $("btnSearch").addEventListener("click", function(){
-            // intentionally no-op for now
+            // no-op for now
           });
           $("btnBackLogin").addEventListener("click", function(){
             window.location.href = "/";
           });
-          // TODO: Hacer que cuando se hace un log out, de verdad se salga
 
+          // Iniciar todo
           ensureTokenOrRedirect();
           loadAll();
         })();
-      </script>
+        </script>
     </body>
   </html>
   `;

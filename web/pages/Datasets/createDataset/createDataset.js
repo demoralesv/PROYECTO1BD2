@@ -112,7 +112,6 @@ const createDataset = () => {
           <span>Create Dataset</span>
         </div>
         <div class="row">
-          <button id="btnBack" class="btn">← Back</button>
           <button id="btnProfile" class="btn icon" title="Profile">🏠</button>
         </div>
       </header>
@@ -273,14 +272,14 @@ const createDataset = () => {
 
           $("fileInput").addEventListener("change", function(e){
             const selected = Array.from(e.target.files || []);
-            files = dedupeByNameSize(files.concat(selected)); // append + dedupe
+            files = dedupeByNameSize(files.concat(selected));
             renderFileChips();
             e.target.value = ""; // allow re-choosing the same file later
           });
 
           $("videoInput").addEventListener("change", function(e){
             const selected = Array.from(e.target.files || []);
-            videos = dedupeByNameSize(videos.concat(selected)); // append + dedupe
+            videos = dedupeByNameSize(videos.concat(selected));
             renderVideoGrid();
             e.target.value = "";
           });
@@ -315,10 +314,9 @@ const createDataset = () => {
           });
 
           $("btnCancel").addEventListener("click", function(){ window.location.href = "/profile" });
-          $("btnBack").addEventListener("click", function(){ history.back() });
           $("btnProfile").addEventListener("click", function(){ window.location.href = "/profile" });
 
-          // init
+          // Correr todo
           ensureToken();
           setText("datasetId", genId());
           loadOwner().catch(function(e){ setStatus(e.message) });
