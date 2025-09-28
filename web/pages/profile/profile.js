@@ -47,7 +47,20 @@ const profile = () => {
         @media (max-width: 900px){
           .page{grid-template-columns:1fr}
         }
-
+        .pill{
+          display:inline-block;
+          padding:2px 8px;
+          border-radius:999px;
+          font-size:.8rem;
+          border:1px solid var(--line);
+          white-space: nowrap;
+          line-height: 1.2;
+        }
+        .pill.pending   { background: #0f141c; color: var(--text); border-color: var(--line); }      /* interface look */
+        .pill.submitted { background: #3b2f0a; color: #f2c94c; border-color: #5a4a14; }              /* yellow-ish */
+        .pill.approved  { background: #0f1a14; color: #27ae60; border-color: #1d6a3e; }              /* green */
+        .pill.declined  { background: #1a0f10; color: #eb5757; border-color: #6a1f22; } 
+        
         // Ventana del perfil
         .profile{padding:18px}
         .avatar{
@@ -74,9 +87,10 @@ const profile = () => {
           padding:12px; border-top:1px solid #0e1218;
         }
         .table tbody tr:first-child td{ border-top:none }
-        .col-name{width:60%}
-        .col-votes{width:20%}
-        .col-actions{width:20%; text-align:right}
+        .col-name   { width: 58%; }
+        .col-status { width: 22%; }
+        .col-votes  { width: 8%;  }
+        .col-actions{ width: 12%; text-align:right; }
         .empty-row td{
           text-align:center; color:var(--muted); font-style:italic;
         }
@@ -136,6 +150,7 @@ const profile = () => {
             <thead>
               <tr>
                 <th class="col-name">Dataset name</th>
+                <th style="width:20%">Status</th>
                 <th class="col-votes">Votes</th>
                 <th class="col-actions">Action</th>
               </tr>
@@ -152,12 +167,9 @@ const profile = () => {
         (function () {
           var API = "http://localhost:3000";
 
-          // funciones de ayuda
+          // Funciones de ayuda
           function $(id){ return document.getElementById(id); }
-          function setText(id, text){
-            var el = $(id);
-            if (el) el.textContent = text;
-          }
+          function setText(id, text){ var el = $(id); if (el) el.textContent = text; }
           function authHeaders(){
             var t = localStorage.getItem("token");
             return t ? { "Authorization": "Bearer " + t } : {};
@@ -181,11 +193,10 @@ const profile = () => {
           function fmtDateISO(s){
             if (!s) return "—";
             var d = new Date(s);
-            // ISO (yyyy-mm-dd)
             return d.toISOString().split("T")[0];
           }
 
-          // funciones para la interfaz
+          // Renders para la interfaz
           function renderProfile(p){
             var avatar = (p && p.avatarUrl)
               ? p.avatarUrl
@@ -197,6 +208,12 @@ const profile = () => {
             setText("role", "Role: " + (p && p.role ? p.role : "user"));
           }
 
+          function pillHtml(s){
+            var st = (s||'pending').toLowerCase();
+            var label = st==='submitted'?'Submitted':st==='approved'?'Approved':st==='declined'?'Declined':'Pending submission';
+            return '<span class="pill '+st+'">'+label+'</span>';
+          }
+
           function renderDatasets(items){
             var tbody = $("filesBody");
             tbody.innerHTML = "";
@@ -204,7 +221,7 @@ const profile = () => {
             if (!items || items.length === 0) {
               var trEmpty = document.createElement("tr");
               trEmpty.className = "empty-row";
-              trEmpty.innerHTML = '<td colspan="3">No datasets yet</td>';
+              trEmpty.innerHTML = '<td colspan="4">No datasets yet</td>';
               tbody.appendChild(trEmpty);
               return;
             }
@@ -223,15 +240,15 @@ const profile = () => {
                     '</div>' +
                   '</div>' +
                 '</td>' +
+                '<td class="col-status">' + pillHtml(ds.status) + '</td>' +
                 '<td class="col-votes">' + (ds.votes != null ? ds.votes : 0) + '</td>' +
                 '<td class="col-actions">' +
-                  '<button class="btn sm" data-id="' + (ds.datasetId || ds.id) + '" data-action="view">View</button> ' +
-                  '<button class="btn sm" data-id="' + (ds.datasetId || ds.id) + '" data-action="delete" disabled>Delete</button>' +
+                  '<button class="btn sm" data-id="' + (ds.datasetId || ds.id) + '" data-action="view">View</button>' +
                 '</td>';
               tbody.appendChild(tr);
             });
 
-            // Botones de "View"
+            // Botones para ver los datasets
             Array.prototype.forEach.call(
               tbody.querySelectorAll('button[data-action="view"]'),
               function(btn){
@@ -243,7 +260,7 @@ const profile = () => {
             );
           }
 
-          // Cargar los datos
+          // Cargar todo
           function loadAll(){
             setText("status", "Loading…");
             Promise.all([
@@ -255,7 +272,6 @@ const profile = () => {
               var ds = arr[1];
               renderProfile(me);
               renderDatasets((ds && ds.items) || []);
-              // update left-side count if you show it
               setText("statFiles", (ds && (ds.total != null ? ds.total : (ds.items ? ds.items.length : 0))) || 0);
               setText("status", "");
             })
@@ -265,7 +281,7 @@ const profile = () => {
             });
           }
 
-          // Acciones de la barra superior
+          // Botones en la barra de arriba
           $("btnAddDataset").addEventListener("click", function(){
             window.location.href = "/datasets/new";
           });
@@ -279,13 +295,15 @@ const profile = () => {
             loadAll();
           });
           $("btnSearch").addEventListener("click", function(){
-            // no-op for now
+            // TODO: Hacer que funcione la búsqueda
           });
           $("btnBackLogin").addEventListener("click", function(){
+            // Clear token then go to login
+            localStorage.removeItem("token");
             window.location.href = "/";
           });
 
-          // Iniciar todo
+          // Iniciar
           ensureTokenOrRedirect();
           loadAll();
         })();

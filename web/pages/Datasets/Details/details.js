@@ -42,7 +42,11 @@ const datasetView = () => {
         width:64px; height:64px; border-radius:12px; object-fit:cover; background:#121820; border:1px solid var(--line)
         }
         .hero h1{ margin:0; font-size:1.4rem }
-
+        .pill{padding:2px 8px; border-radius:999px; font-size:.8rem; border:1px solid var(--line)}
+        .pill.pending   { background: #0f141c; color: var(--text); border-color: var(--line); }      /* interface look */
+        .pill.submitted { background: #3b2f0a; color: #f2c94c; border-color: #5a4a14; }              /* yellow-ish */
+        .pill.approved  { background: #0f1a14; color: #27ae60; border-color: #1d6a3e; }              /* green */
+        .pill.declined  { background: #1a0f10; color: #eb5757; border-color: #6a1f22; }
         /* usuario */
         .owner{ display:flex; align-items:center; gap:10px }
         .owner img{
@@ -85,8 +89,9 @@ const datasetView = () => {
         <div class="title-row">
             <img id="dsAvatar" class="ds-avatar" alt="dataset avatar" />
             <div>
-            <h1 id="dsName">—</h1>
-            <div class="muted" id="dsDates">—</div>
+                <h1 id="dsName">—</h1>
+                <div class="muted" id="dsDates">—</div>
+                <div id="dsStatusPill" style="margin-top:6px"></div> <!-- NEW -->
             </div>
         </div>
 
@@ -159,6 +164,14 @@ const datasetView = () => {
             .then(function(r){ return r.ok ? r.json() : r.json().then(function(d){throw new Error(d.error||r.statusText)}) });
         }
 
+        function apiPost(path, body){
+            return fetch(API + path, {
+                method: "POST",
+                headers: Object.assign({ "Content-Type":"application/json" }, authHeaders()),
+                body: body ? JSON.stringify(body) : undefined
+            }).then(r => r.ok ? r.json() : r.json().then(d=>{throw new Error(d.error||r.statusText)}));
+        }
+
         function fmtDate(d){
         try{ return new Date(d).toLocaleString(); } catch(_){ return d || "—"; }
         }
@@ -167,6 +180,21 @@ const datasetView = () => {
         // URL like /datasets/abc123
         var parts = location.pathname.split("/");
         return parts[2] || "";
+        }
+
+        function statusPillHtml(s){
+            const st = (s || "pending").toLowerCase();
+            const label = st === "submitted" ? "Submitted"
+                        : st === "approved"  ? "Approved"
+                        : st === "declined"  ? "Declined"
+                        : "Pending submission";
+            return '<span class="pill ' + st + '">' + label + '</span>';
+            }
+
+        function setStatusPill(s) {
+            $("dsStatusPill").innerHTML = statusPillHtml(s);
+            // Disable "Submit" if already submitted/approved/declined
+            $("btnSubmit").disabled = ["submitted","approved","declined"].includes((s||"").toLowerCase());
         }
 
         function render(ds){
@@ -182,6 +210,9 @@ const datasetView = () => {
 
         // Descripción
         setText("dsDesc", ds.description || "—");
+
+        // Estado del dataset
+        setStatusPill(ds.status);
 
         // Archivos TODO: Mostrarlos cuando se guarden
         var fileList = $("fileList"); fileList.innerHTML = "";
@@ -219,11 +250,31 @@ const datasetView = () => {
         });
 
         $("btnSubmit").addEventListener("click", function(){
-            alert("Submit for review (todo)");
+            setText("status", "Submitting…");
+            apiPost("/api/datasets/" + encodeURIComponent(ds.datasetId || ds.id) + "/submit")
+                .then(function(resp){
+                setText("status", "Submitted ✔");
+                setStatusPill(resp.status || "submitted");
+                })
+                .catch(function(e){ setText("status", e.message) });
         });
 
+        $("btnDelete").disabled = false;
         $("btnDelete").addEventListener("click", function(){
-            alert("Delete (todo)");
+        if (!confirm("Delete this dataset? This cannot be undone.")) return;
+        setText("status", "Deleting…");
+        const toDelete = ds.datasetId || ds.id;
+        fetch(API + "/api/datasets/" + encodeURIComponent(toDelete), {
+            method: "DELETE",
+            headers: Object.assign({ "Content-Type":"application/json" }, authHeaders())
+        })
+        .then(r => r.ok ? r.json() : r.json().then(d=>{throw new Error(d.error||r.statusText)}))
+        .then(() => {
+            setText("status", "Deleted ✔");
+            // go back to profile and refresh its list
+            window.location.href = "/profile";
+        })
+        .catch(e => setText("status", e.message));
         });
         }
 

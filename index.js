@@ -3,6 +3,7 @@ import express, { json } from "express";
 import dotenv from "dotenv";
 import bcrypt from "bcrypt";
 import jwt from "jsonwebtoken";
+import mongoose from "mongoose";
 import User from "./src/models/User.js";
 import Dataset from "./src/models/Dataset.js";
 import login from "./web/pages/login/login.js";
@@ -133,6 +134,7 @@ app.post("/datasets", verifyToken, async (req, res) => {
       name: ds.name,
       description: ds.description,
       datasetAvatarUrl: ds.datasetAvatarUrl,
+      status: ds.status,
       owner: ds.owner,
       createdAt: ds.createdAt,
       updatedAt: ds.updatedAt,
@@ -144,6 +146,90 @@ app.post("/datasets", verifyToken, async (req, res) => {
     res.status(500).json({ error: err.message });
   }
 });
+// Cambiar estado de dataset a Submitted
+app.post("/api/datasets/:id/submit", verifyToken, async (req, res) => {
+  try {
+    const { id } = req.params;
+
+    // Encontrar por ID del dataset y después por el del objeto
+    const query = mongoose.isValidObjectId(id)
+      ? { $or: [{ datasetId: id }, { _id: id }] }
+      : { datasetId: id };
+
+    const ds = await Dataset.findOne(query);
+    if (!ds) return res.status(404).json({ error: "Dataset not found" });
+    if (String(ds.owner) !== String(req.userId)) {
+      return res.status(403).json({ error: "Not your dataset" });
+    }
+
+    ds.status = "submitted";
+    await ds.save();
+
+    res.json({ ok: true, status: ds.status, updatedAt: ds.updatedAt });
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+// Poner en Pending cuando se hacen cambios
+app.put("/api/datasets/:id", verifyToken, async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { name, description, datasetAvatarUrl } = req.body;
+
+    const query = mongoose.isValidObjectId(id)
+      ? { $or: [{ datasetId: id }, { _id: id }] }
+      : { datasetId: id };
+    const ds = await Dataset.findOne(query);
+    if (!ds) return res.status(404).json({ error: "Dataset not found" });
+    if (String(ds.owner) !== String(req.userId)) {
+      return res.status(403).json({ error: "Not your dataset" });
+    }
+
+    if (name) ds.name = name;
+    if (description) ds.description = description;
+    ds.datasetAvatarUrl = datasetAvatarUrl ?? ds.datasetAvatarUrl;
+    ds.status = "pending"; // <— reset on edit
+
+    await ds.save();
+
+    res.json({
+      id: String(ds._id),
+      datasetId: ds.datasetId,
+      name: ds.name,
+      description: ds.description,
+      datasetAvatarUrl: ds.datasetAvatarUrl || null,
+      status: ds.status,
+      updatedAt: ds.updatedAt,
+    });
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+//Borrar dataset
+app.delete("/api/datasets/:id", verifyToken, async (req, res) => {
+  try {
+    const { id } = req.params;
+
+    let ds = await Dataset.findOne({ datasetId: id });
+    if (!ds && mongoose.isValidObjectId(id)) {
+      ds = await Dataset.findById(id);
+    }
+    if (!ds) return res.status(404).json({ error: "Dataset not found" });
+
+    // Lo puede borrar un admin o el usuario que lo creó
+    const isOwner = String(ds.owner) === String(req.userId);
+    const isAdmin = req.userRole === "admin";
+    if (!isOwner && !isAdmin) {
+      return res.status(403).json({ error: "Not allowed" });
+    }
+
+    await ds.deleteOne();
+    res.json({ ok: true });
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
 // Info del usuario que ya ingresó
 app.get("/me", verifyToken, async (req, res) => {
   try {
@@ -174,6 +260,7 @@ app.get("/datasets", verifyToken, async (req, res) => {
       datasetId: d.datasetId,
       name: d.name,
       description: d.description,
+      status: d.status,
       votes: d.votes ?? 0,
       updatedAt: d.updatedAt,
     }));
@@ -214,6 +301,7 @@ app.get("/api/datasets/:id", verifyToken, async (req, res) => {
       name: ds.name,
       description: ds.description,
       datasetAvatarUrl: ds.datasetAvatarUrl || null,
+      status: ds.status,
       owner: ds.owner
         ? {
             id: String(ds.owner._id),
@@ -233,8 +321,6 @@ app.get("/api/datasets/:id", verifyToken, async (req, res) => {
 });
 
 app.use(updateRouter);
-
-
 
 // Start server
 app.listen(PORT, () => {

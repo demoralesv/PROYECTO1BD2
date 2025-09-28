@@ -13,6 +13,13 @@ const DatasetSchema = new mongoose.Schema(
     name: { type: String, required: true },
     description: { type: String, required: true },
     datasetAvatarUrl: { type: String, default: null },
+
+    status: {
+      type: String,
+      enum: ["pending", "submitted", "approved", "declined"],
+      default: "pending",
+      index: true,
+    },
   },
   { timestamps: true }
 );
