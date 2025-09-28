@@ -109,6 +109,7 @@ const profile = () => {
               <h2 id="fullName">—</h2>
               <span class="muted" id="username">@user</span>
               <span class="chip" id="dob">DOB—</span>
+              <span class="chip" id="role">role</span>
             </div>
           </div>
           <div class="divider"></div>
@@ -193,6 +194,7 @@ const profile = () => {
             setText("fullName", (p && p.fullName) || "—");
             setText("username", p && p.username ? "@" + p.username : "—");
             setText("dob", "Birth date: " + (p && p.dob ? fmtDateISO(p.dob) : "—"));
+            setText("role", "Role: " + (p && p.role ? p.role : "user"));
           }
 
           function renderDatasets(items){

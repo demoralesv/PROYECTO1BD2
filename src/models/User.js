@@ -8,6 +8,7 @@ const userSchema = new mongoose.Schema({
   fullname: { type: String, required: true },
   birthDate: { type: Date, required: true },
   avatarUrl: { type: String, default: null},
+  role: { type: String, enum: ["user", "admin"], default: "user" },
 });
 
 const User = mongoose.model("User", userSchema);

@@ -156,6 +156,7 @@ app.get("/me", verifyToken, async (req, res) => {
       dob: user.birthDate || null,
       avatarUrl: user.avatarUrl || null,
       stats: { files: 0, followers: 0, following: 0 }, // por ahora no están
+      role: user.role,
     });
   } catch (err) {
     res.status(500).json({ error: err.message });
