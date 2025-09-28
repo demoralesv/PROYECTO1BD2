@@ -15,7 +15,8 @@ import { verifyToken } from "./src/routes/auth.routes.js";
 import { initCassandra, cassandraClient } from "./src/databases/cassandra.js";
 import redisClient from "./src/databases/redis.js";
 import connectNeo from "./src/databases/neo4j.js";
-
+import profileEdit from "./web/pages/profile/edit.js";
+import updateRouter from "./src/routes/updateProfile.js";
 dotenv.config();
 
 const app = express();
@@ -40,6 +41,9 @@ app.get("/signup", (req, res) => {
 // Perfil del usuario
 app.get("/profile", (req, res) => {
   res.send(profile());
+});
+app.get("/profile/edit", (req, res) => {
+  res.send(profileEdit());
 });
 // Crear un dataset
 app.get("/datasets/new", (req, res) => {
@@ -226,6 +230,10 @@ app.get("/api/datasets/:id", verifyToken, async (req, res) => {
     res.status(500).json({ error: e.message });
   }
 });
+
+app.use(updateRouter);
+
+
 
 // Start server
 app.listen(PORT, () => {

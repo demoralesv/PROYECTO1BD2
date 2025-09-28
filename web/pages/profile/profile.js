@@ -5,7 +5,7 @@ const profile = () => {
     <head>
       <meta charset="utf-8" />
       <meta name="viewport" content="width=device-width, initial-scale=1" />
-      <title>App • Dashboard</title>
+      <title>Profile</title>
       <style>
         :root{
           --bg:#0b0d10; --panel:#12161c; --muted:#9fb0c8;
@@ -269,6 +269,9 @@ const profile = () => {
           });
           $("btnMessages").addEventListener("click", function(){
             window.location.href = "/messages.html";
+          });
+          $("btnEdit").addEventListener("click", function(){
+            window.location.href = "/profile/edit";
           });
           $("btnMyProfile").addEventListener("click", function(){
             loadAll();
