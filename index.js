@@ -4,9 +4,11 @@ import dotenv from "dotenv";
 import bcrypt from "bcrypt";
 import jwt from "jsonwebtoken";
 import User from "./src/models/User.js";
+import Dataset from "./src/models/Dataset.js";
 import login from "./web/pages/login/login.js";
 import signup from "./web/pages/signup/signup.js";
 import profile from "./web/pages/profile/profile.js";
+import createDataset from "./web/pages/createDataset/createDataset.js";
 import connectDB from "./src/databases/mongo.js";
 import { verifyToken } from "./src/routes/auth.routes.js";
 import { initCassandra, cassandraClient } from "./src/databases/cassandra.js";
@@ -20,7 +22,7 @@ app.use(express.static("pages"));
 app.use(express.json());
 
 connectDB();
-await initCassandra();
+//await initCassandra();
 
 // rutas, definen que hace cuando se le agrega /algo a la url
 // Home = login
@@ -34,6 +36,10 @@ app.get("/signup", (req, res) => {
 // Perfil del usuario
 app.get("/profile", (req, res) => {
   res.send(profile());
+});
+// Crear un dataset
+app.get("/datasets/new", (req, res) => {
+  res.send(createDataset());
 });
 
 app.get("/nombreDeFuncion", (req, res) => {
@@ -88,7 +94,44 @@ app.post("/auth/signup", async (req, res) => {
     res.status(500).json({ error: err.message });
   }
 });
+// Crear dataset
+app.post("/datasets", verifyToken, async (req, res) => {
+  try {
+    const { datasetId, name, description, datasetAvatarUrl } = req.body;
 
+    if (!name || !description) {
+      return res
+        .status(400)
+        .json({ error: "Name and description are required" });
+    }
+
+    const ds = new Dataset({
+      owner: req.userId,
+      datasetId,
+      name,
+      description,
+      datasetAvatarUrl: datasetAvatarUrl || null,
+    });
+
+    await ds.save();
+
+    return res.json({
+      _id: ds._id,
+      datasetId: ds.datasetId,
+      name: ds.name,
+      description: ds.description,
+      datasetAvatarUrl: ds.datasetAvatarUrl,
+      owner: ds.owner,
+      createdAt: ds.createdAt,
+      updatedAt: ds.updatedAt,
+    });
+  } catch (err) {
+    if (err.code === 11000) {
+      return res.status(409).json({ error: "datasetId already exists" });
+    }
+    res.status(500).json({ error: err.message });
+  }
+});
 // Info del usuario que ya ingresó
 app.get("/me", verifyToken, async (req, res) => {
   try {

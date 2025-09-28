@@ -123,7 +123,10 @@ const profile = () => {
         <section class="card panel">
           <div class="row" style="margin-bottom:10px">
             <h3>My Datasets</h3>
-            <span class="muted" id="status"></span>
+            <div class="row" style="gap:8px; align-items:center">
+              <span class="muted" id="status"></span>
+              <button id="btnAddDataset" class="btn primary sm">Add dataset</button>
+            </div>
           </div>
 
           <!-- Purely visual table: no data management yet -->
@@ -208,6 +211,10 @@ const profile = () => {
               });
           }
 
+          $("btnAddDataset").addEventListener("click", function(){
+            window.location.href = "/datasets/new";
+          });
+
           // Mostrar barra de arriba
           $("btnMessages").addEventListener("click", function(){
             window.location.href = "/messages.html";
@@ -221,6 +228,7 @@ const profile = () => {
           $("btnBackLogin").addEventListener("click", function(){
             window.location.href = "/";
           });
+          // TODO: Hacer que cuando se hace un log out, de verdad se salga
 
           ensureTokenOrRedirect();
           loadAll();
