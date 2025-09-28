@@ -3,12 +3,10 @@ import dotenv from "dotenv";
 import { Client } from "cassandra-driver";
 dotenv.config();
 
-const {
-  CASSANDRA_CONTACT_POINTS = "34.61.186.153",
-  CASSANDRA_PORT = "9042",
-  CASSANDRA_DATACENTER = "datacenter1",
-  CASSANDRA_KEYSPACE = "appks",
-} = process.env;
+  const CASSANDRA_CONTACT_POINTS = process.env.CASSANDRA_CONTACT_POINTS;
+  const CASSANDRA_PORT = process.env.CASSANDRA_PORT;
+  const CASSANDRA_DATACENTER = process.env.CASSANDRA_DATACENTER;
+  const CASSANDRA_KEYSPACE = process.env.CASSANDRA_KEYSPACE;
 
 export const cassandraClient = new Client({
   contactPoints: CASSANDRA_CONTACT_POINTS.split(",").map(s => s.trim()),
@@ -41,5 +39,5 @@ export async function initCassandra() {
     ) WITH CLUSTERING ORDER BY (event_time DESC);
   `);
 
-  console.log("✅ Cassandra inicializada");
+  console.log("✅ Cassandra connected and keyspace ready");
 }
