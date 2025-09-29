@@ -100,7 +100,7 @@ const profile = () => {
       <header class="topbar">
         <div class="brand">
           <span class="logo"></span>
-          <span>Site Name</span>
+          <span>Profile</span>
         </div>
 
         <div class="search-wrap">
@@ -110,7 +110,7 @@ const profile = () => {
 
         <div class="top-actions">
           <a id="btnMessages" class="btn">Messages</a>
-          <button id="btnMyProfile" class="btn icon" title="My profile">🏠</button>
+          <button id="btnHome" class="btn icon" title="Home">🏠</button>
           <button id="btnBackLogin" class="btn" title="Log out">Log Out</button>
         </div>
       </header>
@@ -291,9 +291,9 @@ const profile = () => {
           $("btnEdit").addEventListener("click", function(){
             window.location.href = "/profile/edit";
           });
-          $("btnMyProfile").addEventListener("click", function(){
-            loadAll();
-          });
+          $("btnHome").addEventListener("click", function(){
+            window.location.href = "/home";
+          }); 
           $("btnSearch").addEventListener("click", function(){
             // TODO: Hacer que funcione la búsqueda
           });

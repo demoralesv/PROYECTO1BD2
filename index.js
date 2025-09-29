@@ -9,6 +9,8 @@ import Dataset from "./src/models/Dataset.js";
 import login from "./web/pages/login/login.js";
 import signup from "./web/pages/signup/signup.js";
 import profile from "./web/pages/profile/profile.js";
+import home from "./web/pages/Home/home.js";
+import profileEdit from "./web/pages/profile/edit.js";
 import createDataset from "./web/pages/Datasets/createDataset/createDataset.js";
 import datasetView from "./web/pages/Datasets/Details/details.js";
 import connectDB from "./src/databases/mongo.js";
@@ -16,8 +18,9 @@ import { verifyToken } from "./src/routes/auth.routes.js";
 import { initCassandra, cassandraClient } from "./src/databases/cassandra.js";
 import redisClient from "./src/databases/redis.js";
 import connectNeo from "./src/databases/neo4j.js";
-import profileEdit from "./web/pages/profile/edit.js";
 import updateRouter from "./src/routes/updateProfile.js";
+import datasetApproved from "./src/routes/datasetsApproved.js";
+
 dotenv.config();
 
 const app = express();
@@ -38,6 +41,10 @@ app.get("/", (req, res) => {
 // Signup
 app.get("/signup", (req, res) => {
   res.send(signup());
+});
+// Home
+app.get("/home", (req, res) => {
+  res.send(home());
 });
 // Perfil del usuario
 app.get("/profile", (req, res) => {
@@ -321,6 +328,7 @@ app.get("/api/datasets/:id", verifyToken, async (req, res) => {
 });
 
 app.use(updateRouter);
+app.use(datasetApproved);
 
 // Start server
 app.listen(PORT, () => {
