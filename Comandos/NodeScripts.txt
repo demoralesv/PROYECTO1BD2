@@ -1,0 +1,15 @@
+Merge (s:User {ID: $VAR}); (Busca un nodo con ID = VAR, lo crea si no existe)
+
+Crea una relaci[on] entre 2 nodos
+
+MATCH (nodo1:User {ID:$VAR})
+MATCH (nodo2:User {ID:$VAR})
+
+Create (nodo1)-[:Friends]->(nodo2)
+
+Nodo 1 se relaciona con Nodo2 atravaes de Amigos
+
+Busca todos los n nodos que tengan una relacion de Friends con el nodo especificado
+
+Match (n)-[:Friends]->(x:User{ID:1})
+             Return n.ID;
