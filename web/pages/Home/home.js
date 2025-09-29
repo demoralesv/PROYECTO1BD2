@@ -215,7 +215,7 @@ const home = () => {
             setText("status", "Loading…");
             Promise.all([
               apiGet("/me"),
-              apiGet("/datasetsApproved?status=approved")
+              apiGet("/datasetsApproved?status=submitted") // cambiar aqui para ver datasets aprobados
             ])
             .then(function(arr){
               var me = arr[0];
