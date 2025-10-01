@@ -1,5 +1,5 @@
-Merge (s:User {ID: $VAR}); (Busca un nodo con ID = VAR, lo crea si no existe)
-
+Merge (s:User {ID: $VAR}); (Busca un nodo con ID = VAR de User, lo crea si no existe)
+Merge (d:Dataset {ID: $VAR, UserID: $VAR}); (Busca un nodo con ID = VAR de Dataset, lo crea si no existe)
 Crea una relaci[on] entre 2 nodos
 
 MATCH (nodo1:User {ID:$VAR})
@@ -13,3 +13,8 @@ Busca todos los n nodos que tengan una relacion de Friends con el nodo especific
 
 Match (n)-[:Friends]->(x:User{ID:1})
              Return n.ID;
+
+MATCH (nodo1:User {ID:$VAR})
+MATCH (nodo2:Dataset {ID:$VAR})
+Create (nodo1)-[:Downloads]->(nodo2)
+Create (nodo1)-[:votes{amount: $VAR}]->(nodo2) En este caso crea la relaci[on con un atributo de amount, indicando los votos 
