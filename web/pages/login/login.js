@@ -1,10 +1,10 @@
 const login = () => {
   return `
   <!doctype html>
-  <html lang="es">
+  <html lang="en">
     <head>
       <meta charset="utf-8" />
-      <title>Login / Sign-up</title>
+      <title>Login</title>
       <meta name="viewport" content="width=device-width, initial-scale=1" />
       <style>
         body{font-family:system-ui,arial,segui ui; background:#0b0d10; color:#e7eef7; display:grid; place-items:center; min-height:100vh}
@@ -59,7 +59,7 @@ const login = () => {
             document.getElementById("token").textContent = \`JWT: \${data.token.slice(0,32)}...\`;
             
             localStorage.setItem("token", data.token);
-            window.location.href = "/profile";
+            window.location.href = "/home";
 
           }catch(e){
             setMsg("li_msg", e.message);

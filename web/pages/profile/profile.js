@@ -61,7 +61,7 @@ const profile = () => {
         .pill.approved  { background: #0f1a14; color: #27ae60; border-color: #1d6a3e; }              /* green */
         .pill.declined  { background: #1a0f10; color: #eb5757; border-color: #6a1f22; } 
         
-        // Ventana del perfil
+        /* Ventana del perfil */
         .profile{padding:18px}
         .avatar{
           width:96px; height:96px; border-radius:16px; background:#0f141a; object-fit:cover; display:block
@@ -105,7 +105,7 @@ const profile = () => {
 
         <div class="search-wrap">
           <input id="q" class="input" placeholder="Search people or datasets…" />
-          <button id="btnSearch" class="btn">Search</button>
+          <button id="btnSearch" class="btn">🔍</button>
         </div>
 
         <div class="top-actions">
@@ -129,8 +129,8 @@ const profile = () => {
           <div class="divider"></div>
           <div class="kv">
             <span class="muted">Datasets</span><span id="statFiles">0</span>
-            <span class="muted">Followers</span><span id="statFollowers">0</span>
-            <span class="muted">Following</span><span id="statFollowing">0</span>
+            <a href=/followers style="text-decoration:none"> <span class="muted">Followers </span></a> <span id="statFollowers">0</span>
+            <a href=/following style="text-decoration:none"><span class="muted">Following</span></a> <span id="statFollowing">0</span>
           </div>
           <div class="divider"></div>
           <button id="btnEdit" class="btn">Edit Profile</button>
@@ -145,7 +145,7 @@ const profile = () => {
             </div>
           </div>
 
-          <!-- Purely visual table: no data management yet -->
+          <!-- Tabla de Datasets -->
           <table class="table" aria-label="My files">
             <thead>
               <tr>
@@ -157,7 +157,7 @@ const profile = () => {
             </thead>
             <tbody id="filesBody">
               <tr class="empty-row">
-                <td colspan="3">No datasets yet</td>
+                <td colspan="4">No datasets yet</td>
               </tr>
             </tbody>
           </table>
@@ -259,7 +259,15 @@ const profile = () => {
               }
             );
           }
-
+          function num(x){
+            if (x == null) return 0;
+            if (typeof x === "number") return x;
+            if (typeof x.toNumber === "function") return x.toNumber(); // neo4j-int
+            if (typeof x.low === "number") return x.low;               // neo4j {low,high}
+            if (typeof x.count === "number") return x.count;           // {count:n}
+            const n = Number(x);
+            return Number.isFinite(n) ? n : 0;
+          }
           // Cargar todo
           function loadAll(){
             setText("status", "Loading…");
@@ -274,6 +282,8 @@ const profile = () => {
               renderDatasets((ds && ds.items) || []);
               setText("statFiles", (ds && (ds.total != null ? ds.total : (ds.items ? ds.items.length : 0))) || 0);
               setText("status", "");
+              setText("statFollowers", num(me && me.stats && me.stats.followers));
+              setText("statFollowing", num(me && me.stats && me.stats.following));
             })
             .catch(function(err){
               setText("status", err.message);
@@ -293,10 +303,23 @@ const profile = () => {
           });
           $("btnHome").addEventListener("click", function(){
             window.location.href = "/home";
-          }); 
-          $("btnSearch").addEventListener("click", function(){
-            // TODO: Hacer que funcione la búsqueda
           });
+           
+          var btnSearch = $("btnSearch");
+          var inputQ = $("q"); // <-- matches your <input id="q">
+
+          if (btnSearch && inputQ) {
+            btnSearch.addEventListener("click", function () {
+              var q = (inputQ.value || "").trim();
+              if (q) location.href = "/search?q=" + encodeURIComponent(q);
+              else location.href = "/search";
+            });
+
+            inputQ.addEventListener("keydown", function (e) {
+              if (e.key === "Enter") btnSearch.click();
+            });
+          }
+
           $("btnBackLogin").addEventListener("click", function(){
             // Clear token then go to login
             localStorage.removeItem("token");
