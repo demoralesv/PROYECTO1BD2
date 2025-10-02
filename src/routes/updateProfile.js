@@ -2,7 +2,7 @@
 import { Router } from "express";
 import User from "../models/User.js";
 import { verifyToken } from "./auth.routes.js";
-
+import { getFollowCounts } from "./getFollowCounts.js";
 
 const router = Router();
 function dicebearFrom(seed) {
@@ -52,13 +52,17 @@ router.patch("/me", verifyToken, async (req, res) => {
       { $set: updates },
       { new: true, runValidators: true, lean: true }
     );
-
+    const { followers, following } = await getFollowCounts(updated.username);
     res.json({
       username: updated.username,
       fullName: updated.fullname,
       dob: updated.birthDate || null,
       avatarUrl: updated.avatarUrl || null,
-      stats: { files: 0, followers: 0, following: 0 },
+      stats: {
+        files: 0,         
+        followers,        
+        following,        
+      },
     });
   } catch (err) {
     res.status(500).json({ error: err.message });

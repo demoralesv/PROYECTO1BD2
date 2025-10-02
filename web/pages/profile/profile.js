@@ -129,8 +129,8 @@ const profile = () => {
           <div class="divider"></div>
           <div class="kv">
             <span class="muted">Datasets</span><span id="statFiles">0</span>
-            <span class="muted">Followers</span><span id="statFollowers">0</span>
-            <span class="muted">Following</span><span id="statFollowing">0</span>
+            <a href=/followers style="text-decoration:none"> <span class="muted">Followers </span></a> <span id="statFollowers">0</span>
+            <a href=/following style="text-decoration:none"><span class="muted">Following</span></a> <span id="statFollowing">0</span>
           </div>
           <div class="divider"></div>
           <button id="btnEdit" class="btn">Edit Profile</button>
@@ -259,7 +259,15 @@ const profile = () => {
               }
             );
           }
-
+          function num(x){
+            if (x == null) return 0;
+            if (typeof x === "number") return x;
+            if (typeof x.toNumber === "function") return x.toNumber(); // neo4j-int
+            if (typeof x.low === "number") return x.low;               // neo4j {low,high}
+            if (typeof x.count === "number") return x.count;           // {count:n}
+            const n = Number(x);
+            return Number.isFinite(n) ? n : 0;
+          }
           // Cargar todo
           function loadAll(){
             setText("status", "Loading…");
@@ -274,6 +282,8 @@ const profile = () => {
               renderDatasets((ds && ds.items) || []);
               setText("statFiles", (ds && (ds.total != null ? ds.total : (ds.items ? ds.items.length : 0))) || 0);
               setText("status", "");
+              setText("statFollowers", num(me && me.stats && me.stats.followers));
+              setText("statFollowing", num(me && me.stats && me.stats.following));
             })
             .catch(function(err){
               setText("status", err.message);

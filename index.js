@@ -14,13 +14,21 @@ import profileEdit from "./web/pages/profile/edit.js";
 import createDataset from "./web/pages/Datasets/createDataset/createDataset.js";
 import datasetView from "./web/pages/Datasets/Details/details.js";
 import connectDB from "./src/databases/mongo.js";
+import followers from "./web/pages/Followers-Following/Followers/followers.js";
+import following from "./web/pages/Followers-Following/Following/following.js";
+import getFollowers from "./src/routes/getFollowers.js";
+import getFollowing from "./src/routes/getFollowing.js";
+import profilePublic from "./web/pages/profile/profilePublic.js";
+import getUserProfile from "./src/routes/getUserProfile.js";
+
 import { verifyToken } from "./src/routes/auth.routes.js";
 import { initCassandra, cassandraClient } from "./src/databases/cassandra.js";
 import redisClient from "./src/databases/redis.js";
-import connectNeo from "./src/databases/neo4j.js";
+import { initNeo4j } from "./src/databases/neo4j.js";
 import updateRouter from "./src/routes/updateProfile.js";
 import datasetApproved from "./src/routes/datasetsApproved.js";
-
+import driver from "./src/databases/neo4j.js";
+import { getFollowCounts } from "./src/routes/getFollowCounts.js";
 dotenv.config();
 
 const app = express();
@@ -31,7 +39,7 @@ app.use(express.json());
 
 connectDB();
 await initCassandra();
-connectNeo();
+await initNeo4j();
 //Redis se conecta solo al iniciar el proyecto
 // rutas, definen que hace cuando se le agrega /algo a la url
 // Home = login
@@ -53,6 +61,19 @@ app.get("/profile", (req, res) => {
 app.get("/profile/edit", (req, res) => {
   res.send(profileEdit());
 });
+app.get("/profile/:username", (req, res) => {
+  res.send(profilePublic());
+});
+
+//ver seguidores
+app.get("/followers", (req, res) => {
+  res.send(followers());
+} );
+//ver siguiendo
+app.get("/following", (req, res) => {
+  res.send(following());
+} );  
+
 // Crear un dataset
 app.get("/datasets/new", (req, res) => {
   res.send(createDataset());
@@ -60,10 +81,6 @@ app.get("/datasets/new", (req, res) => {
 // Info de un dataset
 app.get("/datasets/:id", (req, res) => {
   res.send(datasetView());
-});
-
-app.get("/nombreDeFuncion", (req, res) => {
-  res.send(nombreDeFuncion());
 });
 
 // Login
@@ -88,6 +105,7 @@ app.post("/auth/login", async (req, res) => {
     res.status(500).json({ error: err.message });
   }
 });
+
 //signup
 app.post("/auth/signup", async (req, res) => {
   try {
@@ -109,11 +127,23 @@ app.post("/auth/signup", async (req, res) => {
     });
     await user.save();
 
+    //crear nodo en neo4j
+    const session = driver.session();
+    try {
+      await session.run(
+        `MERGE (s:User {ID: $username})`,
+        { username: user.username }
+      );
+    } finally {
+      await session.close();
+    } 
+    
     res.json({ msg: "User Created✅" });
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
 });
+
 // Crear dataset
 app.post("/datasets", verifyToken, async (req, res) => {
   try {
@@ -242,41 +272,55 @@ app.get("/me", verifyToken, async (req, res) => {
   try {
     const user = await User.findById(req.userId).lean();
     if (!user) return res.status(404).json({ error: "User not found" });
-
+    const { followers, following } = await getFollowCounts(user.username);
     res.json({
       username: user.username,
       fullName: user.fullname,
       dob: user.birthDate || null,
       avatarUrl: user.avatarUrl || null,
-      stats: { files: 0, followers: 0, following: 0 }, // por ahora no están
+      stats: { files: 0, followers, following },
       role: user.role,
     });
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
 });
-// Obtener los datasets del usuario
+// Obtener los datasets (míos o de otro usuario por username)
 app.get("/datasets", verifyToken, async (req, res) => {
   try {
-    const { mine } = req.query;
-    const filter = mine ? { owner: req.userId } : {};
+    const { mine, owner, status } = req.query;
+    const filter = {};
+
+    if (String(mine).toLowerCase() === "true") {
+      filter.owner = req.userId;
+    }
+    if (owner) {
+      const u = await User.findOne({ username: owner }, { _id: 1 }).lean();
+      if (!u) return res.json({ items: [], total: 0 });
+      filter.owner = u._id;
+    }
+    if (status) filter.status = status;
+
     const items = await Dataset.find(filter).sort({ createdAt: -1 }).lean();
+    const total = await Dataset.countDocuments(filter);
 
-    const result = items.map((d) => ({
-      id: d._id,
-      datasetId: d.datasetId,
-      name: d.name,
-      description: d.description,
-      status: d.status,
-      votes: d.votes ?? 0,
-      updatedAt: d.updatedAt,
-    }));
-
-    res.json({ items: result, total: result.length });
+    res.json({
+      items: items.map(d => ({
+        id: d._id,
+        datasetId: d.datasetId,
+        name: d.name,
+        description: d.description,
+        status: d.status,
+        votes: d.votes ?? 0,
+        updatedAt: d.updatedAt,
+      })),
+      total
+    });
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
 });
+
 // Obtener info de un dataset
 app.get("/api/datasets/:id", verifyToken, async (req, res) => {
   try {
@@ -329,8 +373,15 @@ app.get("/api/datasets/:id", verifyToken, async (req, res) => {
 
 app.use(updateRouter);
 app.use(datasetApproved);
-
+app.use(getFollowers);
+app.use(getFollowing);
+app.use(getUserProfile);
 // Start server
 app.listen(PORT, () => {
   console.log(`Server running at http://localhost:${PORT}`);
+});
+
+process.on("SIGINT", async () => {
+  await driver.close();
+  process.exit(0);
 });
