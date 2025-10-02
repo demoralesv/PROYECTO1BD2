@@ -31,10 +31,12 @@ import updateRouter from "./src/routes/updateProfile.js";
 import datasetApproved from "./src/routes/datasetsApproved.js";
 import driver from "./src/databases/neo4j.js";
 import { getFollowCounts } from "./src/routes/getFollowCounts.js";
+import {postComment} from "./src/routes/createComment.js"
+import {getComments} from "./src/routes/getComments.js"
 dotenv.config();
 
 const app = express();
-const PORT = 3000;
+const PORT = 3001;
 app.use(express.static("pages"));
 // Middleware to parse JSON
 app.use(express.json());
@@ -378,6 +380,20 @@ app.get("/api/datasets/:id", verifyToken, async (req, res) => {
     res.status(500).json({ error: e.message });
   }
 });
+
+// publicar un comentario
+//recibe: id del post, id del usuario y el comentario como tal
+
+//curl.exe -X POST "http://localhost:3001/posts/123/comments" ^
+// -H "Content-Type: application/json" ^
+// -d "{\"texto\":\"Comentario desde curl.exe\",\"idAutor\":\"user123\"}"
+
+app.post("/posts/:postId/comments", postComment);
+
+
+//"http://localhost:3001/posts/123/comments"
+app.get("/posts/:postId/comments", getComments);
+
 
 app.use(updateRouter);
 app.use(datasetApproved);
