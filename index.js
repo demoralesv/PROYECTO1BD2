@@ -16,10 +16,12 @@ import datasetView from "./web/pages/Datasets/Details/details.js";
 import connectDB from "./src/databases/mongo.js";
 import followers from "./web/pages/Followers-Following/Followers/followers.js";
 import following from "./web/pages/Followers-Following/Following/following.js";
+import searchPage from "./web/pages/Search/search.js";
 import getFollowers from "./src/routes/getFollowers.js";
 import getFollowing from "./src/routes/getFollowing.js";
 import profilePublic from "./web/pages/profile/profilePublic.js";
 import getUserProfile from "./src/routes/getUserProfile.js";
+import searchRouter from "./src/routes/search.js";
 
 import { verifyToken } from "./src/routes/auth.routes.js";
 import { initCassandra, cassandraClient } from "./src/databases/cassandra.js";
@@ -36,6 +38,7 @@ const PORT = 3000;
 app.use(express.static("pages"));
 // Middleware to parse JSON
 app.use(express.json());
+app.use(searchRouter);
 
 connectDB();
 await initCassandra();
@@ -68,19 +71,25 @@ app.get("/profile/:username", (req, res) => {
 //ver seguidores
 app.get("/followers", (req, res) => {
   res.send(followers());
-} );
+});
 //ver siguiendo
 app.get("/following", (req, res) => {
   res.send(following());
-} );  
+});
 
 // Crear un dataset
 app.get("/datasets/new", (req, res) => {
   res.send(createDataset());
 });
+
 // Info de un dataset
 app.get("/datasets/:id", (req, res) => {
   res.send(datasetView());
+});
+
+//Buscar datasets o usuarios
+app.get("/search", (req, res) => {
+  res.send(searchPage());
 });
 
 // Login
@@ -130,14 +139,13 @@ app.post("/auth/signup", async (req, res) => {
     //crear nodo en neo4j
     const session = driver.session();
     try {
-      await session.run(
-        `MERGE (s:User {ID: $username})`,
-        { username: user.username }
-      );
+      await session.run(`MERGE (s:User {ID: $username})`, {
+        username: user.username,
+      });
     } finally {
       await session.close();
-    } 
-    
+    }
+
     res.json({ msg: "User Created✅" });
   } catch (err) {
     res.status(500).json({ error: err.message });
@@ -305,7 +313,7 @@ app.get("/datasets", verifyToken, async (req, res) => {
     const total = await Dataset.countDocuments(filter);
 
     res.json({
-      items: items.map(d => ({
+      items: items.map((d) => ({
         id: d._id,
         datasetId: d.datasetId,
         name: d.name,
@@ -314,7 +322,7 @@ app.get("/datasets", verifyToken, async (req, res) => {
         votes: d.votes ?? 0,
         updatedAt: d.updatedAt,
       })),
-      total
+      total,
     });
   } catch (err) {
     res.status(500).json({ error: err.message });
