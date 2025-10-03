@@ -456,8 +456,10 @@ const datasetView = () => {
         alert("Download will be implemented later.");
         });
 
-        $("btnEdit").addEventListener("click", function(){
-        alert("Edit dataset (todo)");
+        $("btnEdit").addEventListener("click", function () {
+            const id = ds.datasetId || ds.id || ds._id;
+            if (!id) { alert("Missing dataset id"); return; }
+            window.location.href = "/datasets/" + encodeURIComponent(id) + "/edit";
         });
 
         $("btnSubmit").addEventListener("click", function(){
@@ -490,7 +492,7 @@ const datasetView = () => {
         // Info del usuario
         apiGet("/me").then(me => {
             const authorId = me.username || me._id || me.id || "anon";
-            const isAdmin  = me.role === "admin";  // 👈 works with your /me
+            const isAdmin  = me.role === "admin";
 
             loadComments(postId, authorId, isAdmin);
 

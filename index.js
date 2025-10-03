@@ -13,6 +13,7 @@ import home from "./web/pages/Home/home.js";
 import profileEdit from "./web/pages/profile/edit.js";
 import createDataset from "./web/pages/Datasets/createDataset/createDataset.js";
 import datasetView from "./web/pages/Datasets/Details/details.js";
+import datasetEdit from "./web/pages/Datasets/Edit/datasetEdit.js";
 import connectDB from "./src/databases/mongo.js";
 import followers from "./web/pages/Followers-Following/Followers/followers.js";
 import following from "./web/pages/Followers-Following/Following/following.js";
@@ -100,6 +101,10 @@ app.get("/search", (req, res) => {
   res.send(searchPage());
 });
 
+//Editar datasets
+app.get("/datasets/:id/edit", (req, res) => {
+  res.send(datasetEdit());
+});
 // Login
 app.post("/auth/login", async (req, res) => {
   try {
@@ -241,7 +246,7 @@ app.put("/api/datasets/:id", verifyToken, async (req, res) => {
     if (name) ds.name = name;
     if (description) ds.description = description;
     ds.datasetAvatarUrl = datasetAvatarUrl ?? ds.datasetAvatarUrl;
-    ds.status = "pending"; // <— reset on edit
+    ds.status = "pending";
 
     await ds.save();
 
