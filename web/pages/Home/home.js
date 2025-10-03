@@ -90,8 +90,8 @@ const home = () => {
         </div>
 
         <div class="search-wrap">
-          <input class="input" type="text" placeholder="Search datasets..." />
-          <button class="btn icon" title="Search"><span>🔍</span></button>
+          <input id="q" class="input" type="text" placeholder="Search datasets..." />
+          <button id="btnSearch" class="btn icon" title="Search"><span>🔍</span></button>
         </div>
 
         <div class="top-actions">
@@ -227,6 +227,21 @@ const home = () => {
             .catch(function(err){
               setText("status", err.message);
               renderDatasets([]);
+            });
+          }
+
+          var btnSearch = $("btnSearch");
+          var inputQ = $("q");
+
+          if (btnSearch && inputQ) {
+            btnSearch.addEventListener("click", function () {
+              var q = (inputQ.value || "").trim();
+              if (q) location.href = "/search?q=" + encodeURIComponent(q);
+              else location.href = "/search";
+            });
+
+            inputQ.addEventListener("keydown", function (e) {
+              if (e.key === "Enter") btnSearch.click();
             });
           }
 

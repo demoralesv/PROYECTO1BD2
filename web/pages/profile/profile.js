@@ -306,7 +306,7 @@ const profile = () => {
           });
            
           var btnSearch = $("btnSearch");
-          var inputQ = $("q"); // <-- matches your <input id="q">
+          var inputQ = $("q");
 
           if (btnSearch && inputQ) {
             btnSearch.addEventListener("click", function () {

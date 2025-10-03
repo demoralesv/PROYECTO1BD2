@@ -103,9 +103,15 @@ const searchPage = () => {
         return res.json();
       });
   }
+  function displayName(u) {
+    return (u && (u.fullName || u.fullname)) || "Unnamed";
+  }
+
   function avatarUrl(p){
-    return (p && p.avatarUrl) ? p.avatarUrl
-      : "https://api.dicebear.com/8.x/initials/svg?seed=" + encodeURIComponent((p && (p.fullName||p.username)) || "User");
+    var name = (p && (p.fullName || p.fullname || p.username)) || "User";
+    return (p && p.avatarUrl)
+      ? p.avatarUrl
+      : "https://api.dicebear.com/8.x/initials/svg?seed=" + encodeURIComponent(name);
   }
 
   // Leer parámetros
@@ -155,20 +161,23 @@ const searchPage = () => {
 
   function renderPeople(users){
     renderHead("people");
-    var tbody = $("tbody"); tbody.innerHTML = '';
+    var tbody = $("tbody"); 
+    tbody.innerHTML = '';
     if(!users || users.length === 0) return renderEmpty("No users found");
+
     users.forEach(function(u){
       var tr = document.createElement("tr");
       tr.innerHTML =
         '<td class="col-name">'+
           '<div style="display:flex; gap:10px; align-items:center">'+
             '<img class="avatar small" src="'+ avatarUrl(u) +'" alt="avatar" />'+
-            '<div><div style="font-weight:600">'+ (u.fullName || "Unnamed") +'</div>'+
-            '<div class="muted" style="font-size:.85rem">'+ (u.bio ? u.bio.substring(0,80) : "") +'</div></div>'+
+            '<div>'+
+              '<div style="font-weight:600">' + displayName(u) + '</div>'+
+            '</div>'+
           '</div>'+
         '</td>'+
         '<td class="col-mid">'+ (u.username ? '@'+u.username : '—') +'</td>'+
-        '<td class="col-actions"><a class="btn" href="/u/'+ encodeURIComponent(u.username || u._id) +'">View profile</a></td>';
+        '<td class="col-actions"><a class="btn" href="/profile/'+ encodeURIComponent(u.username || u._id) +'">View profile</a></td>';
       tbody.appendChild(tr);
     });
   }
@@ -207,12 +216,12 @@ const searchPage = () => {
         '<td class="col-name">'+
           '<div style="display:flex; gap:10px; align-items:center">'+
             '<img class="avatar small" src="'+ avatarUrl(u) +'" alt="avatar" />'+
-            '<div><div style="font-weight:600">'+ (u.fullName || "Unnamed") +'</div>'+
+            '<div style="font-weight:600">' + displayName(u) + '</div>'+
             '<div class="muted" style="font-size:.85rem">'+ (u.username ? '@'+u.username : '—') +'</div></div>'+
           '</div>'+
         '</td>'+
         '<td class="col-mid"><span class="pill">User</span></td>'+
-        '<td class="col-actions"><a class="btn" href="/u/'+ encodeURIComponent(u.username || u._id) +'">View profile</a></td>';
+        '<td class="col-actions"><a class="btn" href="/profile/'+ encodeURIComponent(u.username || u._id) +'">View profile</a></td>';
       tbody.appendChild(tr);
     });
 

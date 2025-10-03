@@ -103,7 +103,7 @@ const profileEditPage = () => {
               <div class="field">
                 <label for="avatarUrlInput">Avatar URL</label>
                 <input id="avatarUrlInput" class="input" placeholder="https://..." inputmode="url" />
-                <div class="help">Use a public URL. Let empty to use initials.</div>
+                <div class="help">Use a public URL. Leave empty to use initials.</div>
               </div>
 
               <div class="field">

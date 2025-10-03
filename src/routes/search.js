@@ -5,7 +5,7 @@ import { verifyToken } from "./auth.routes.js";
 
 const router = Router();
 
-// helpers
+// Ayudan a que se vea bonito
 function normalizeLimitPage(req) {
   const limit = Math.min(
     Math.max(parseInt(req.query.limit || "20", 10), 1),
@@ -16,47 +16,71 @@ function normalizeLimitPage(req) {
   return { limit, page, skip };
 }
 
-// Basic text search (uses text index if available; falls back to regex)
-async function searchUsers(q, { limit, skip }) {
-  if (!q) {
-    return await User.find({})
-      .select("fullName username avatarUrl bio")
-      .sort({ createdAt: -1 })
-      .skip(skip)
-      .limit(limit)
-      .lean();
-  }
-
-  const textQuery = { $text: { $search: q } };
-  const regexQuery = {
-    $or: [
-      { fullName: { $regex: q, $options: "i" } },
-      { username: { $regex: q, $options: "i" } },
-      { bio: { $regex: q, $options: "i" } },
-    ],
-  };
-
-  try {
-    return await User.find(textQuery, { score: { $meta: "textScore" } })
-      .select("fullName username avatarUrl bio")
-      .sort({ score: { $meta: "textScore" } })
-      .skip(skip)
-      .limit(limit)
-      .lean();
-  } catch {
-    return await User.find(regexQuery)
-      .select("fullName username avatarUrl bio")
-      .sort({ createdAt: -1 })
-      .skip(skip)
-      .limit(limit)
-      .lean();
-  }
+function escapeRegExp(s) {
+  return s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 }
 
+// Búsqueda de usuarios
+async function searchUsers(q, { limit, skip }) {
+  const projection = "fullName fullname username avatarUrl";
+  if (!q) {
+    return await User.find({})
+      .select(projection)
+      .sort({ createdAt: -1 })
+      .skip(skip)
+      .limit(limit)
+      .lean();
+  }
+
+  const regex = new RegExp(escapeRegExp(q), "i");
+
+  // Consulta de $text. Es para buscar palabras relevantes
+  let textResults = [];
+  try {
+    textResults = await User.find(
+      { $text: { $search: q, $language: "english" } },
+      { score: { $meta: "textScore" } }
+    )
+      .select(projection)
+      .sort({ score: { $meta: "textScore" } })
+      .skip(0)
+      .limit(200)
+      .lean();
+  } catch (_) {}
+
+  // regex fallback para buscar palabras parciales o prefijos
+  const regexResults = await User.find({
+    $or: [
+      { fullName: { $regex: regex } },
+      { fullname: { $regex: regex } },
+      { username: { $regex: regex } },
+    ],
+  })
+    .select(projection)
+    .sort({ createdAt: -1 })
+    .skip(0)
+    .limit(200)
+    .lean();
+
+  // Obtener los resultados
+  const seen = new Set();
+  const merged = [];
+  for (const r of [...textResults, ...regexResults]) {
+    const id = String(r._id);
+    if (!seen.has(id)) {
+      seen.add(id);
+      merged.push(r);
+    }
+  }
+
+  // Crear páginas de la búsqueda
+  return merged.slice(skip, skip + limit);
+}
+
+// Búsqueda de datasets
 async function searchDatasets(q, { limit, skip }) {
   const baseSel =
-    "name downloads datasetId owner ownerUsername status updatedAt";
-
+    "name description downloads datasetId owner ownerUsername status updatedAt";
   if (!q) {
     return await Dataset.find({ status: "approved" })
       .select(baseSel)
@@ -67,43 +91,53 @@ async function searchDatasets(q, { limit, skip }) {
       .lean();
   }
 
-  const textQuery = {
-    $and: [{ status: "approved" }, { $text: { $search: q } }],
-  };
-  const regexQuery = {
-    $and: [
-      { status: "approved" },
-      {
-        $or: [
-          { name: { $regex: q, $options: "i" } },
-          { description: { $regex: q, $options: "i" } },
-          { tags: { $regex: q, $options: "i" } },
-          { ownerUsername: { $regex: q, $options: "i" } },
-        ],
-      },
-    ],
-  };
+  const regex = new RegExp(escapeRegExp(q), "i");
 
+  // Consulta de $text. Es para buscar palabras relevantes
+  let textResults = [];
   try {
-    return await Dataset.find(textQuery, { score: { $meta: "textScore" } })
+    textResults = await Dataset.find(
+      { status: "approved", $text: { $search: q, $language: "english" } },
+      { score: { $meta: "textScore" } }
+    )
       .select(baseSel)
       .populate("owner", "username")
       .sort({ score: { $meta: "textScore" } })
-      .skip(skip)
-      .limit(limit)
+      .limit(200)
       .lean();
-  } catch {
-    return await Dataset.find(regexQuery)
-      .select(baseSel)
-      .populate("owner", "username")
-      .sort({ updatedAt: -1 })
-      .skip(skip)
-      .limit(limit)
-      .lean();
+  } catch (_) {}
+
+  // 2) regex fallback para buscar palabras parciales o prefijos
+  const regexResults = await Dataset.find({
+    status: "approved",
+    $or: [
+      { name: { $regex: regex } },
+      { description: { $regex: regex } },
+      { ownerUsername: { $regex: regex } },
+    ],
+  })
+    .select(baseSel)
+    .populate("owner", "username")
+    .sort({ updatedAt: -1 })
+    .limit(200)
+    .lean();
+
+  // Obtener los resultados
+  const seen = new Set();
+  const merged = [];
+  for (const r of [...textResults, ...regexResults]) {
+    const id = String(r._id);
+    if (!seen.has(id)) {
+      seen.add(id);
+      merged.push(r);
+    }
   }
+
+  // Crear páginas de la búsqueda
+  return merged.slice(skip, skip + limit);
 }
 
-// Routes (use the same auth middleware name you already use elsewhere)
+// Rutas
 router.get("/api/search/all", verifyToken, async (req, res) => {
   const { limit, skip } = normalizeLimitPage(req);
   const q = (req.query.q || "").trim();

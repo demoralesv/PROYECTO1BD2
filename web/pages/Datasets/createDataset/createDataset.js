@@ -112,7 +112,7 @@ const createDataset = () => {
           <span>Create Dataset</span>
         </div>
         <div class="row">
-          <button id="btnProfile" class="btn icon" title="Profile">🏠</button>
+          <button id="btnHome" class="btn icon" title="Home">🏠</button>
         </div>
       </header>
 
@@ -124,11 +124,11 @@ const createDataset = () => {
                 <input type="hidden" id="datasetId" />
 
                 <div class="owner-header">
-                <img id="ownerAvatar" class="owner-avatar" alt="Owner avatar" />
-                <div class="owner-text">
-                    <div id="ownerName" class="owner-name">—</div>
-                    <div id="ownerUsername" class="owner-username">@user</div>
-                </div>
+                  <img id="ownerAvatar" class="owner-avatar" alt="Owner avatar" />
+                  <div class="owner-text">
+                      <div id="ownerName" class="owner-name">—</div>
+                      <div id="ownerUsername" class="owner-username">@user</div>
+                  </div>
                 </div>
 
                 <div class="field">
@@ -136,9 +136,10 @@ const createDataset = () => {
                     <input id="dsAvatar" class="input" placeholder="https://…/image.png" />
                     <div class="thumb">
                         <img id="dsAvatarPreview" alt="Dataset avatar preview"
-                            style="width:92px;height:92px;object-fit:cover;border-radius:12px" />
+                            style="width:72px;height:72px;object-fit:cover;border-radius:12px" />
                     </div>
                 </div>
+            </div>
         </aside>
 
         <!-- Parte derecha -->
@@ -205,6 +206,24 @@ const createDataset = () => {
               headers: Object.assign({ "Content-Type":"application/json" }, authHeaders()),
               body: JSON.stringify(body)
             }).then(function(r){ return r.ok ? r.json() : r.json().then(d=>{throw new Error(d.error||r.statusText)}) })
+          }
+
+          function validHttpUrl(s){
+            return /^https?:\/\//i.test((s || "").trim());
+          }
+
+          function seedDsAvatar(){
+            // Use dataset name (or a generic label) for initials
+            var name = ( $("dsName").value || "" ).trim() || "Dataset";
+            return "https://api.dicebear.com/8.x/initials/svg?seed=" + encodeURIComponent(name);
+          }
+
+          function refreshDsAvatarPreview() {
+            const input = ( $("dsAvatar").value || "" ).trim();
+            const src = validHttpUrl(input) ? input : seedDsAvatar();
+            const img = $("dsAvatarPreview");
+            if (!img) return;
+            img.src = src;
           }
 
           // Info del usuario
@@ -283,9 +302,13 @@ const createDataset = () => {
             renderVideoGrid();
             e.target.value = "";
           });
-          $("dsAvatar").addEventListener("input", function(e){
-            var url = e.target.value.trim();
-            $("dsAvatarPreview").src = url || "";
+
+          $("dsAvatar").addEventListener("input", refreshDsAvatarPreview);
+
+          $("dsName").addEventListener("input", refreshDsAvatarPreview);
+
+          $("dsAvatarPreview").addEventListener("error", function(){
+            this.src = seedDsAvatar();
           });
           
           // Guardar
@@ -293,7 +316,9 @@ const createDataset = () => {
           $("btnSave").addEventListener("click", function(){
             var name = $("dsName").value.trim();
             var desc = $("dsDesc").value.trim();
-            var avatar = $("dsAvatar").value.trim() || null;
+            var urlInput = ($("dsAvatar").value || "").trim();
+            var avatar = validHttpUrl(urlInput) ? urlInput : seedDsAvatar();
+
             if(!name || !desc){ setStatus("Please fill required fields."); return }
 
             var payload = {
@@ -314,12 +339,13 @@ const createDataset = () => {
           });
 
           $("btnCancel").addEventListener("click", function(){ window.location.href = "/profile" });
-          $("btnProfile").addEventListener("click", function(){ window.location.href = "/profile" });
+          $("btnHome").addEventListener("click", function(){ window.location.href = "/home" });
 
           // Correr todo
           ensureToken();
-          setText("datasetId", genId());
+          $("datasetId").value = genId();
           loadOwner().catch(function(e){ setStatus(e.message) });
+          refreshDsAvatarPreview();
           renderFileChips();
           renderVideoGrid();
         })();

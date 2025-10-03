@@ -31,12 +31,12 @@ import updateRouter from "./src/routes/updateProfile.js";
 import datasetApproved from "./src/routes/datasetsApproved.js";
 import driver from "./src/databases/neo4j.js";
 import { getFollowCounts } from "./src/routes/getFollowCounts.js";
-import {postComment} from "./src/routes/createComment.js"
-import {getComments} from "./src/routes/getComments.js"
+import { postComment } from "./src/routes/createComment.js";
+import { getComments } from "./src/routes/getComments.js";
 dotenv.config();
 
 const app = express();
-const PORT = 3001;
+const PORT = 3000;
 app.use(express.static("pages"));
 // Middleware to parse JSON
 app.use(express.json());
@@ -48,6 +48,11 @@ await initNeo4j();
 //Redis se conecta solo al iniciar el proyecto
 // rutas, definen que hace cuando se le agrega /algo a la url
 // Home = login
+
+await User.syncIndexes();
+await Dataset.syncIndexes();
+console.log("✅ Indexes synced");
+
 app.get("/", (req, res) => {
   res.send(login());
 });
@@ -390,10 +395,8 @@ app.get("/api/datasets/:id", verifyToken, async (req, res) => {
 
 app.post("/posts/:postId/comments", postComment);
 
-
 //"http://localhost:3001/posts/123/comments"
 app.get("/posts/:postId/comments", getComments);
-
 
 app.use(updateRouter);
 app.use(datasetApproved);
