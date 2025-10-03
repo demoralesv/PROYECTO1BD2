@@ -33,6 +33,7 @@ import driver from "./src/databases/neo4j.js";
 import { getFollowCounts } from "./src/routes/getFollowCounts.js";
 import { postComment } from "./src/routes/createComment.js";
 import { getComments } from "./src/routes/getComments.js";
+import { deleteComment } from "./src/routes/deleteComment.js";
 dotenv.config();
 
 const app = express();
@@ -387,15 +388,10 @@ app.get("/api/datasets/:id", verifyToken, async (req, res) => {
 });
 
 // publicar un comentario
-//recibe: id del post, id del usuario y el comentario como tal
-
-//curl.exe -X POST "http://localhost:3001/posts/123/comments" ^
-// -H "Content-Type: application/json" ^
-// -d "{\"texto\":\"Comentario desde curl.exe\",\"idAutor\":\"user123\"}"
-
 app.post("/posts/:postId/comments", postComment);
-
-//"http://localhost:3001/posts/123/comments"
+// borrar un comentario
+app.delete("/posts/:postId/comments/:commentId", deleteComment);
+// obtener los comentarios
 app.get("/posts/:postId/comments", getComments);
 
 app.use(updateRouter);
