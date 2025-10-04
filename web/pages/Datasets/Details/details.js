@@ -220,14 +220,15 @@ const datasetView = () => {
     }
 
     function cGet(path){
-        return fetch(API_COMMENTS + path, { headers: {"Content-Type":"application/json"} })
-        .then(r=>r.ok?r.json():r.json().then(d=>{throw new Error(d.error||r.statusText)}));
+        return fetch(API_COMMENTS + path, {
+            headers: Object.assign({ "Content-Type":"application/json" }, authHeaders())
+        }).then(r=>r.ok?r.json():r.json().then(d=>{throw new Error(d.error||r.statusText)}));
     }
     function cPost(path, body){
         return fetch(API_COMMENTS + path, {
-        method:"POST",
-        headers: {"Content-Type":"application/json"},
-        body: JSON.stringify(body||{})
+            method:"POST",
+            headers: Object.assign({ "Content-Type":"application/json" }, authHeaders()),
+            body: JSON.stringify(body||{})
         }).then(r=>r.ok?r.json():r.json().then(d=>{throw new Error(d.error||r.statusText)}));
     }
 
@@ -364,6 +365,38 @@ const datasetView = () => {
         });
     }
 
+    // Botón para publicar un comentario
+    function wirePostForm(postId, authorId, isAdmin){
+        var btn = $("btnPostComment");
+        var ta  = $("commentInput");
+        if (!btn || !ta) return;
+
+        btn.onclick = function(){
+            var txt = (ta.value || "").trim();
+            if (!txt){
+            setText("commentStatus", "Write something first.");
+            ta.focus();
+            return;
+            }
+            btn.disabled = true;
+            setText("commentStatus", "Posting…");
+
+            cPost("/posts/" + encodeURIComponent(postId) + "/comments", { texto: txt, idAutor: authorId })
+            .then(function(){
+                ta.value = "";
+                return cGet("/posts/" + encodeURIComponent(postId) + "/comments");
+            })
+            .then(function(data){
+                renderComments(data.comentarios || [], authorId, isAdmin, postId);
+                setText("commentStatus", "");
+            })
+            .catch(function(e){
+                setText("commentStatus", e.message || "Failed to post");
+            })
+            .finally(function(){ btn.disabled = false; });
+        };
+    }
+
     // Botón para regresar a la pantalla anterior
     function setupBackButton(){
         var btn = $("btnBack");
@@ -391,7 +424,7 @@ const datasetView = () => {
             history.back();
             }
         });
-        }
+    }
     function buildTree(list){
         const byParent = new Map();
         list.forEach(c => {
@@ -681,21 +714,27 @@ const datasetView = () => {
 
         // Se determina si se muestra el público o el del dueño
         apiGet("/me")
-        .then(function(me){
-            var isOwner = computeIsOwner(me, ds);
+            .then(function(me){
+                const authorId = me.username || me._id || me.id || "anon";
+                const isOwner  = computeIsOwner(me, ds);
 
-            applyMode(isOwner);
-            setDownloadsUI(downloads, isOwner);
+                applyMode(isOwner);
+                setDownloadsUI(downloads, isOwner);
 
-            loadComments(postId, me.username || me._id || me.id || "anon", me.role === "admin");
-            initVoting(ds, { isOwner: isOwner, meId: (me._id || me.id || me.username || null) });
-        })
-        .catch(function(){
-            // treat as public if /me fails
-            applyMode(false);
-            setDownloadsUI(downloads, false);
-            loadComments(postId, "anon", false);
-            initVoting(ds, { isOwner:false, meId:null });
+                loadComments(postId, authorId, me.role === "admin");
+                wirePostForm(postId, authorId, me.role === "admin");
+                initVoting(ds, { isOwner, meId: (me._id || me.id || me.username || null) });
+            })
+            .catch(function(){
+                // Se muestra el perfil público si no se obtiene un dueño
+                const authorId = "anon";
+
+                applyMode(false);
+                setDownloadsUI(downloads, false);
+
+                loadComments(postId, authorId, false);
+                wirePostForm(postId, authorId, false);
+                initVoting(ds, { isOwner:false, meId:null });
         });
     }
 
