@@ -25,6 +25,7 @@ import getUserProfile from "./src/routes/getUserProfile.js";
 import searchRouter from "./src/routes/search.js";
 
 import { verifyToken } from "./src/routes/auth.routes.js";
+import { tryAuth } from "./src/routes/auth.routes.js";
 import { initCassandra, cassandraClient } from "./src/databases/cassandra.js";
 import redisClient from "./src/databases/redis.js";
 import { initNeo4j } from "./src/databases/neo4j.js";
@@ -343,7 +344,7 @@ app.get("/datasets", verifyToken, async (req, res) => {
 });
 
 // Obtener info de un dataset
-app.get("/api/datasets/:id", verifyToken, async (req, res) => {
+app.get("/api/datasets/:id", tryAuth, async (req, res) => {
   try {
     const { id } = req.params;
 
@@ -367,6 +368,10 @@ app.get("/api/datasets/:id", verifyToken, async (req, res) => {
 
     if (!ds) return res.status(404).json({ error: "Dataset not found" });
 
+    const ownerId = String(ds.owner?._id || ds.owner || "");
+    const meId = req.userId ? String(req.userId) : "";
+    const canEdit = ownerId && meId && ownerId === meId;
+
     res.json({
       id: String(ds._id),
       datasetId: ds.datasetId || String(ds._id),
@@ -389,6 +394,32 @@ app.get("/api/datasets/:id", verifyToken, async (req, res) => {
     });
   } catch (e) {
     res.status(500).json({ error: e.message });
+  }
+});
+
+// Votos en un dataset
+app.post("/api/datasets/:id/votes", verifyToken, async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { value } = req.body;
+
+    if (!Number.isInteger(value) || value < 1 || value > 5) {
+      return res.status(400).json({ error: "value must be an integer 1..5" });
+    }
+
+    let ds = await Dataset.findOne({ datasetId: id }).lean();
+    if (!ds && mongoose.isValidObjectId(id)) ds = await Dataset.findById(id).lean();
+    if (ds && String(ds.owner) === String(req.userId)) {
+      return res.status(403).json({ error: "Owners cannot vote their own dataset" });
+    }
+
+    // Por ahora
+    console.log("Vote (stub):", { datasetId: id, user: req.userId, value });
+
+    // Por ahora funciona esto. Ver con Neo4j después
+    return res.json({ ratingAvg: value, ratingCount: 1 });
+  } catch (e) {
+    return res.status(500).json({ error: e.message });
   }
 });
 

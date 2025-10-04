@@ -17,3 +17,14 @@ export function verifyToken(req, res, next) {
     return res.status(401).json({ error: "Invalid or expired token" });
   }
 }
+
+export function tryAuth(req, _res, next) {
+  const h = req.headers.authorization || "";
+  const m = h.match(/^Bearer\s+(.+)$/i);
+  if (!m) return next();
+  try {
+    const payload = jwt.verify(m[1], process.env.JWT_SECRET);
+    req.userId = payload.id || payload._id || payload.userId;
+  } catch (_e) {}
+  next();
+}
