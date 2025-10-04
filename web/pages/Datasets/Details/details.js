@@ -197,7 +197,7 @@ const datasetView = () => {
     var API = "http://localhost:3000";
     var API_COMMENTS = API;
 
-    // ---------- utils ----------
+    // Ayudan a que se vea bien
     function authHeaders(){
         var t = localStorage.getItem("token");
         return t ? { "Authorization": "Bearer " + t } : {};
@@ -245,7 +245,7 @@ const datasetView = () => {
         if (bs) bs.disabled = ["submitted","approved","declined"].includes((s||"").toLowerCase());
     }
 
-    // ---------- owner/public helpers ----------
+    // Funciones para dueños y otros usuarios
     function applyMode(isOwner){
         document.querySelectorAll("[data-owneronly]").forEach(el=>{
         el.style.display = isOwner ? "flex" : "none";
@@ -262,7 +262,7 @@ const datasetView = () => {
         if (isOwner) { if (link)  link.textContent  = txt; }
         else         { if (count) count.textContent = txt; }
     }
-    // robust owner check (prevents flicker)
+
     function computeIsOwner(me, ds){
         function toList(x){ return [x && x._id, x && x.id, x && x.userId, x && x.username].filter(Boolean).map(String); }
         var meVals = toList(me);
@@ -270,7 +270,7 @@ const datasetView = () => {
         return meVals.some(m => owVals.includes(m));
     }
 
-    // ---------- voting (revote allowed) ----------
+    // Votaciones
     function initVoting(ds, ctx){
         var wrap = $("ratingStars");
         var meta = $("ratingMeta");
@@ -278,21 +278,21 @@ const datasetView = () => {
 
         wrap.innerHTML = "";
 
-        // present avg/count if provided; otherwise "No votes yet"
+        // presentar el promedio y la cantidad de votos
         var avg = Number(ds.ratingAvg || 0);
         var cnt = Number(ds.ratingCount || 0);
         meta.textContent = cnt ? (avg.toFixed(1) + " / 5 · " + cnt + " vote" + (cnt===1?"":"s")) : "No votes yet";
 
-        // allow re-vote: we do NOT block with localStorage; we only preselect last click
+        // Se puede cambiar el voto
         var localKey = "vote:" + (ds.datasetId || ds._id || ds.id || "");
         var lastLocal = Number(localStorage.getItem(localKey));
         var current = (Number.isFinite(lastLocal) && lastLocal >= 1 && lastLocal <= 5)
         ? lastLocal
         : (Math.round(avg) || 0);
 
-        var canVote = !ctx.isOwner; // owners can’t vote; everyone else can (again and again)
+        var canVote = !ctx.isOwner; // Los dueños no votan
 
-        // build 5 stars
+        // Ver las 5 estrellas
         for (let i=1;i<=5;i++){
         var b = document.createElement("button");
         b.className = "star";
@@ -303,7 +303,7 @@ const datasetView = () => {
         b.textContent = i<=current ? "★" : "☆";
         if (!canVote) b.disabled = true;
 
-        // hover preview
+        // Mostrar como se llenan con el mouse
         b.addEventListener("mouseenter", function(){
             for (let k=0;k<wrap.children.length;k++){
             var node = wrap.children[k];
@@ -312,12 +312,11 @@ const datasetView = () => {
             }
         });
 
-        // click to (re)vote
+        // Click para votar
         b.addEventListener("click", function(){
             if (!canVote) return;
             var val = i;
 
-            // optimistic highlight
             current = val;
             for (let k=0;k<wrap.children.length;k++){
             var on = (k+1) <= current;
@@ -332,7 +331,6 @@ const datasetView = () => {
                 var newAvg = Number((r && r.ratingAvg) != null ? r.ratingAvg : avg);
                 var newCnt = Number((r && r.ratingCount) != null ? r.ratingCount : (cnt + 1));
                 meta.textContent = newAvg.toFixed(1) + " / 5 · " + newCnt + " vote" + (newCnt===1?"":"s");
-                // keep stars enabled for future re-votes; just remember the last local choice
                 localStorage.setItem(localKey, String(val));
             })
             .catch(function(e){
@@ -343,7 +341,7 @@ const datasetView = () => {
         wrap.appendChild(b);
         }
 
-        // restore current selection on mouseleave
+        // Mostrar selección
         wrap.addEventListener("mouseleave", function(){
         for (let k=0;k<wrap.children.length;k++){
             var on = (k+1) <= current;
@@ -354,7 +352,7 @@ const datasetView = () => {
         });
     }
 
-    // ---------- comments ----------
+    // Comentarios
     function cDelete(path){
         return fetch(API_COMMENTS + path, {
         method: "DELETE",
@@ -366,14 +364,13 @@ const datasetView = () => {
         });
     }
 
+    // Botón para regresar a la pantalla anterior
     function setupBackButton(){
         var btn = $("btnBack");
         if (!btn) return;
 
-        // Choose a sensible fallback if there’s no history/referrer
         var FALLBACK = "/profile";
 
-        // If referrer is same-origin, use it as the href so middle-click works too
         try {
             var ref = document.referrer;
             if (ref) {
@@ -567,9 +564,8 @@ const datasetView = () => {
         .catch(e => { setText("commentStatus", e.message); throw e; });
     }
 
-    // ---------- render ----------
+    // Para poder ver todo
     function render(ds){
-        // Basics
         $("dsAvatar").src =
         ds.datasetAvatarUrl ||
         "https://api.dicebear.com/8.x/shapes/svg?seed=" + encodeURIComponent(ds.name || "dataset");
@@ -587,7 +583,7 @@ const datasetView = () => {
         setText("dsDesc", ds.description || "—");
         setStatusPill(ds.status);
 
-        // Downloads (finalized after mode)
+        // Descargas
         var downloads = Number.isFinite(ds.downloads) ? ds.downloads : 0;
         var downloadsLink = $("downloadsLink");
         if (downloadsLink) {
@@ -598,7 +594,7 @@ const datasetView = () => {
         });
         }
 
-        // Files
+        // Archivos
         var fileList = $("fileList");
         if (fileList) {
         fileList.innerHTML = "";
@@ -633,7 +629,7 @@ const datasetView = () => {
         }
         }
 
-        // Buttons
+        // Botones
         var btnDownload = $("btnDownload");
         if (btnDownload){
         btnDownload.addEventListener("click", function(){
@@ -680,10 +676,10 @@ const datasetView = () => {
         });
         }
 
-        // Comments
+        // Comentarios
         var postId = ds.datasetId || ds._id;
 
-        // Determine mode + finish UI + voting (stable owner check)
+        // Se determina si se muestra el público o el del dueño
         apiGet("/me")
         .then(function(me){
             var isOwner = computeIsOwner(me, ds);
@@ -703,7 +699,7 @@ const datasetView = () => {
         });
     }
 
-    // ---------- boot ----------
+    // Correr todo
     ensureToken();
     var id = datasetIdFromPath();
     if (!id){ setText("status", "Missing dataset id in URL"); return; }
