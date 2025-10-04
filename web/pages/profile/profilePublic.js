@@ -89,7 +89,7 @@ const profilePublic = () => {
 
         <div class="search-wrap">
           <input id="q" class="input" placeholder="Search people or datasets…" />
-          <button id="btnSearch" class="btn">Search</button>
+          <button id="btnSearch" class="btn">🔍</button>
         </div>
 
         <div class="top-actions">
@@ -437,7 +437,20 @@ const profilePublic = () => {
           // Topbar
           $("btnMessages").addEventListener("click", function(){ window.location.href = "/messages.html"; });
           $("btnHome").addEventListener("click", function(){ window.location.href = "/home"; });
-          $("btnSearch").addEventListener("click", function(){ /* TODO */ });
+          var btnSearch = $("btnSearch");
+          var inputQ = $("q");
+
+          if (btnSearch && inputQ) {
+            btnSearch.addEventListener("click", function () {
+              var q = (inputQ.value || "").trim();
+              if (q) location.href = "/search?q=" + encodeURIComponent(q);
+              else location.href = "/search";
+            });
+
+            inputQ.addEventListener("keydown", function (e) {
+              if (e.key === "Enter") btnSearch.click();
+            });
+          }
 
           ensureTokenOrRedirect();
           loadAll();
