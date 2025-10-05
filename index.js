@@ -4,6 +4,11 @@ import dotenv from "dotenv";
 import bcrypt from "bcrypt";
 import jwt from "jsonwebtoken";
 import mongoose from "mongoose";
+import multer from "multer";
+import mime from "mime-types";
+import archiver from "archiver";
+import { types as cassTypes } from "cassandra-driver";
+import { v5 as uuidv5 } from "uuid";
 import User from "./src/models/User.js";
 import Dataset from "./src/models/Dataset.js";
 import login from "./web/pages/login/login.js";
@@ -36,6 +41,9 @@ import { getFollowCounts } from "./src/routes/getFollowCounts.js";
 import { postComment } from "./src/routes/createComment.js";
 import { getComments } from "./src/routes/getComments.js";
 import { deleteComment } from "./src/routes/deleteComment.js";
+
+const MAX_TOTAL_BYTES = 15 * 1024 * 1024;
+
 dotenv.config();
 
 const app = express();
@@ -55,6 +63,11 @@ await initNeo4j();
 await User.syncIndexes();
 await Dataset.syncIndexes();
 console.log("✅ Indexes synced");
+
+const upload = multer({
+  storage: multer.memoryStorage(),
+  limits: { fileSize: 15 * 1024 * 1024 },
+});
 
 app.get("/", (req, res) => {
   res.send(login());
@@ -165,12 +178,29 @@ app.post("/auth/signup", async (req, res) => {
     res.status(500).json({ error: err.message });
   }
 });
+// Info del usuario que ya ingresó
+app.get("/me", verifyToken, async (req, res) => {
+  try {
+    const user = await User.findById(req.userId).lean();
+    if (!user) return res.status(404).json({ error: "User not found" });
+    const { followers, following } = await getFollowCounts(user.username);
+    res.json({
+      username: user.username,
+      fullName: user.fullname,
+      dob: user.birthDate || null,
+      avatarUrl: user.avatarUrl || null,
+      stats: { files: 0, followers, following },
+      role: user.role,
+    });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
 
 // Crear dataset
 app.post("/datasets", verifyToken, async (req, res) => {
   try {
-    const { datasetId, name, description, datasetAvatarUrl } = req.body;
-
+    const { name, description, datasetAvatarUrl } = req.body;
     if (!name || !description) {
       return res
         .status(400)
@@ -179,7 +209,6 @@ app.post("/datasets", verifyToken, async (req, res) => {
 
     const ds = new Dataset({
       owner: req.userId,
-      datasetId,
       name,
       description,
       datasetAvatarUrl: datasetAvatarUrl || null,
@@ -187,9 +216,8 @@ app.post("/datasets", verifyToken, async (req, res) => {
 
     await ds.save();
 
-    return res.json({
+    res.json({
       _id: ds._id,
-      datasetId: ds.datasetId,
       name: ds.name,
       description: ds.description,
       datasetAvatarUrl: ds.datasetAvatarUrl,
@@ -199,9 +227,6 @@ app.post("/datasets", verifyToken, async (req, res) => {
       updatedAt: ds.updatedAt,
     });
   } catch (err) {
-    if (err.code === 11000) {
-      return res.status(409).json({ error: "datasetId already exists" });
-    }
     res.status(500).json({ error: err.message });
   }
 });
@@ -264,49 +289,6 @@ app.put("/api/datasets/:id", verifyToken, async (req, res) => {
     res.status(500).json({ error: e.message });
   }
 });
-//Borrar dataset
-app.delete("/api/datasets/:id", verifyToken, async (req, res) => {
-  try {
-    const { id } = req.params;
-
-    let ds = await Dataset.findOne({ datasetId: id });
-    if (!ds && mongoose.isValidObjectId(id)) {
-      ds = await Dataset.findById(id);
-    }
-    if (!ds) return res.status(404).json({ error: "Dataset not found" });
-
-    // Lo puede borrar un admin o el usuario que lo creó
-    const isOwner = String(ds.owner) === String(req.userId);
-    const isAdmin = req.userRole === "admin";
-    if (!isOwner && !isAdmin) {
-      return res.status(403).json({ error: "Not allowed" });
-    }
-
-    await ds.deleteOne();
-    res.json({ ok: true });
-  } catch (e) {
-    res.status(500).json({ error: e.message });
-  }
-});
-
-// Info del usuario que ya ingresó
-app.get("/me", verifyToken, async (req, res) => {
-  try {
-    const user = await User.findById(req.userId).lean();
-    if (!user) return res.status(404).json({ error: "User not found" });
-    const { followers, following } = await getFollowCounts(user.username);
-    res.json({
-      username: user.username,
-      fullName: user.fullname,
-      dob: user.birthDate || null,
-      avatarUrl: user.avatarUrl || null,
-      stats: { files: 0, followers, following },
-      role: user.role,
-    });
-  } catch (err) {
-    res.status(500).json({ error: err.message });
-  }
-});
 // Obtener los datasets (míos o de otro usuario por username)
 app.get("/datasets", verifyToken, async (req, res) => {
   try {
@@ -327,22 +309,25 @@ app.get("/datasets", verifyToken, async (req, res) => {
     const total = await Dataset.countDocuments(filter);
 
     res.json({
-      items: items.map((d) => ({
-        id: d._id,
-        datasetId: d.datasetId,
-        name: d.name,
-        description: d.description,
-        status: d.status,
-        votes: d.votes ?? 0,
-        updatedAt: d.updatedAt,
-      })),
+      items: items.map((d) => {
+        const pid = String(d._id);
+        return {
+          _id: pid,
+          id: pid,
+          datasetId: d.datasetId,
+          name: d.name,
+          description: d.description,
+          status: d.status,
+          votes: d.votes ?? 0,
+          updatedAt: d.updatedAt,
+        };
+      }),
       total,
     });
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
 });
-
 // Obtener info de un dataset
 app.get("/api/datasets/:id", tryAuth, async (req, res) => {
   try {
@@ -372,9 +357,12 @@ app.get("/api/datasets/:id", tryAuth, async (req, res) => {
     const meId = req.userId ? String(req.userId) : "";
     const canEdit = ownerId && meId && ownerId === meId;
 
+    const pid = String(ds._id);
+
     res.json({
-      id: String(ds._id),
-      datasetId: ds.datasetId || String(ds._id),
+      _id: pid,
+      id: pid,
+      datasetId: ds.datasetId || pid,
       name: ds.name,
       description: ds.description,
       datasetAvatarUrl: ds.datasetAvatarUrl || null,
@@ -387,8 +375,8 @@ app.get("/api/datasets/:id", tryAuth, async (req, res) => {
             avatarUrl: ds.owner.avatarUrl || null,
           }
         : null,
-      files: [], // Ahorita no hay
-      videos: [], // Ahorita no hay
+      files: [],
+      videos: [],
       createdAt: ds.createdAt,
       updatedAt: ds.updatedAt,
     });
@@ -396,7 +384,6 @@ app.get("/api/datasets/:id", tryAuth, async (req, res) => {
     res.status(500).json({ error: e.message });
   }
 });
-
 // Votos en un dataset
 app.post("/api/datasets/:id/votes", verifyToken, async (req, res) => {
   try {
@@ -408,9 +395,12 @@ app.post("/api/datasets/:id/votes", verifyToken, async (req, res) => {
     }
 
     let ds = await Dataset.findOne({ datasetId: id }).lean();
-    if (!ds && mongoose.isValidObjectId(id)) ds = await Dataset.findById(id).lean();
+    if (!ds && mongoose.isValidObjectId(id))
+      ds = await Dataset.findById(id).lean();
     if (ds && String(ds.owner) === String(req.userId)) {
-      return res.status(403).json({ error: "Owners cannot vote their own dataset" });
+      return res
+        .status(403)
+        .json({ error: "Owners cannot vote their own dataset" });
     }
 
     // Por ahora
@@ -418,6 +408,381 @@ app.post("/api/datasets/:id/votes", verifyToken, async (req, res) => {
 
     // Por ahora funciona esto. Ver con Neo4j después
     return res.json({ ratingAvg: value, ratingCount: 1 });
+  } catch (e) {
+    return res.status(500).json({ error: e.message });
+  }
+});
+// El ID del dataset
+function isMongoObjectId(s) {
+  return /^[0-9a-fA-F]{24}$/.test(s || "");
+}
+// UUID para guardar los files en Cassandra
+const DATASET_UUID_NAMESPACE =
+  process.env.DATASET_UUID_NAMESPACE || "3a2bbf3f-7b7c-4f9a-a44b-9f2a8e1f1e10";
+// Convertir el ID del objeto a un UUID
+function objectIdToUuid(oid) {
+  return uuidv5(oid.toLowerCase(), DATASET_UUID_NAMESPACE);
+}
+// Guardar archivos y videos en la BD
+app.post(
+  "/datasets/:datasetId/assets",
+  verifyToken,
+  upload.fields([
+    { name: "files", maxCount: 100 },
+    { name: "videos", maxCount: 100 },
+  ]),
+  async (req, res) => {
+    try {
+      const { datasetId } = req.params;
+      if (!datasetId)
+        return res.status(400).json({ error: "datasetId is required" });
+      if (!isMongoObjectId(datasetId))
+        return res
+          .status(400)
+          .json({ error: "datasetId must be a 24-hex Mongo ObjectId" });
+
+      const datasetUUID = cassTypes.Uuid.fromString(objectIdToUuid(datasetId));
+
+      const files = req.files?.files || [];
+      const videos = req.files?.videos || [];
+      if (files.length === 0 && videos.length === 0) {
+        return res.status(400).json({ error: "No assets uploaded" });
+      }
+
+      const totalBytes = [...files, ...videos].reduce(
+        (a, f) => a + (f.size || 0),
+        0
+      );
+      if (totalBytes > MAX_TOTAL_BYTES) {
+        return res.status(413).json({
+          error:
+            "Combined size exceeds " +
+            MAX_TOTAL_BYTES +
+            " MB. Please upload fewer/smaller files.",
+        });
+      }
+
+      const insert = `
+        INSERT INTO files (dataset_id, id, kind, name, creation_date, amount_of_bytes, blob_data)
+        VALUES (?, ?, ?, ?, toTimestamp(now()), ?, ?)
+      `;
+
+      // Agregar archivos
+      for (const f of files) {
+        await cassandraClient.execute(
+          insert,
+          [
+            datasetUUID,
+            cassTypes.TimeUuid.now(),
+            "file",
+            f.originalname,
+            cassTypes.Long.fromNumber(f.size || 0),
+            f.buffer,
+          ],
+          { prepare: true }
+        );
+      }
+      for (const v of videos) {
+        await cassandraClient.execute(
+          insert,
+          [
+            datasetUUID,
+            cassTypes.TimeUuid.now(),
+            "video",
+            v.originalname,
+            cassTypes.Long.fromNumber(v.size || 0),
+            v.buffer,
+          ],
+          { prepare: true }
+        );
+      }
+
+      res.json({
+        ok: true,
+        uploaded: { files: files.length, videos: videos.length },
+      });
+    } catch (err) {
+      if (
+        String(err.message).includes("Request is too big") ||
+        err.code === "LIMIT_FILE_SIZE"
+      ) {
+        return res.status(413).json({
+          error:
+            "Each upload is limited to " +
+            MAX_TOTAL_BYTES / (1024 * 1024) +
+            " MB combined.",
+        });
+      }
+      console.error(err);
+      res.status(500).json({ error: err.message });
+    }
+  }
+);
+// Obtener cantidad total de bytes de archivos
+app.get(
+  "/datasets/:datasetId/assets/summary",
+  verifyToken,
+  async (req, res) => {
+    try {
+      const { datasetId } = req.params;
+      if (!isMongoObjectId(datasetId))
+        return res.status(400).json({ error: "bad id" });
+
+      const datasetUUID = cassTypes.Uuid.fromString(objectIdToUuid(datasetId));
+      const rs = await cassandraClient.execute(
+        "SELECT kind, name, amount_of_bytes FROM files WHERE dataset_id = ?",
+        [datasetUUID],
+        { prepare: true }
+      );
+      const items = rs.rows || [];
+      const totals = items.reduce(
+        (acc, r) => {
+          const n = Number(
+            r.amount_of_bytes?.toString?.() || r.amount_of_bytes || 0
+          );
+          acc.total += n;
+          if (r.kind === "file") acc.files += n;
+          else if (r.kind === "video") acc.videos += n;
+          return acc;
+        },
+        { total: 0, files: 0, videos: 0 }
+      );
+
+      res.json({ count: items.length, bytes: totals, items });
+    } catch (e) {
+      res.status(500).json({ error: e.message });
+    }
+  }
+);
+// Obtener los archivos y videos de un dataset
+app.get("/api/datasets/:id/assets", verifyToken, async (req, res) => {
+  try {
+    const { id } = req.params;
+    if (!isMongoObjectId(id)) return res.status(400).json({ error: "bad id" });
+
+    const datasetUUID = cassTypes.Uuid.fromString(objectIdToUuid(id));
+    const rs = await cassandraClient.execute(
+      "SELECT id, kind, name, amount_of_bytes, creation_date FROM files WHERE dataset_id = ? ORDER BY id ASC",
+      [datasetUUID],
+      { prepare: true }
+    );
+
+    const rows = rs.rows || [];
+    const items = rows.map((r) => ({
+      assetId: String(r.id),
+      kind: r.kind,
+      name: r.name,
+      bytes: Number(r.amount_of_bytes?.toString?.() || r.amount_of_bytes || 0),
+      createdAt: r.creation_date,
+    }));
+
+    res.json({
+      files: items.filter((x) => x.kind === "file"),
+      videos: items.filter((x) => x.kind === "video"),
+    });
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+// Obtener el ID o el nombre del dataset
+async function getDatasetNameOrId(id) {
+  try {
+    const ds = await Dataset.findById(id).lean();
+    return (ds?.name || String(id)).replace(/[^\w\-.\s]/g, "_").slice(0, 60);
+  } catch {
+    return String(id);
+  }
+}
+// Revisar que el nombre sea único
+function uniqueName(name, used) {
+  const safe = (name || "file").replace(/[\/\\]/g, "_");
+  if (!used.has(safe)) {
+    used.add(safe);
+    return safe;
+  }
+  const ext = path.extname(safe);
+  const base = path.basename(safe, ext);
+  let i = 2;
+  while (used.has(`${base} (${i})${ext}`)) i++;
+  const out = `${base} (${i})${ext}`;
+  used.add(out);
+  return out;
+}
+// Descargar los archivos
+app.get("/api/datasets/:id/download", verifyToken, async (req, res) => {
+  try {
+    const { id } = req.params;
+    if (!isMongoObjectId(id)) return res.status(400).json({ error: "bad id" });
+
+    const datasetUUID = cassTypes.Uuid.fromString(objectIdToUuid(id));
+
+    const rs = await cassandraClient.execute(
+      "SELECT id, kind, name, amount_of_bytes, blob_data FROM files WHERE dataset_id = ?",
+      [datasetUUID],
+      { prepare: true }
+    );
+
+    const rows = (rs.rows || []).filter((r) => r.kind === "file");
+    if (rows.length === 0) {
+      return res
+        .status(404)
+        .json({ error: "No files to download in this dataset" });
+    }
+
+    const zipName = (await getDatasetNameOrId(id)) + ".zip";
+    res.setHeader("Content-Type", "application/zip");
+    res.setHeader(
+      "Content-Disposition",
+      `attachment; filename="${encodeURIComponent(zipName)}"`
+    );
+
+    const archive = archiver("zip", { zlib: { level: 9 } });
+    archive.on("error", (err) => {
+      try {
+        res.status(500).end();
+      } catch {}
+    });
+
+    archive.pipe(res);
+
+    const used = new Set();
+    for (const r of rows) {
+      const fname = uniqueName(r.name || "file", used);
+      const size = Number(
+        r.amount_of_bytes?.toString?.() || r.amount_of_bytes || 0
+      );
+      const ct = mime.lookup(fname) || "application/octet-stream";
+      archive.append(r.blob_data, {
+        name: fname,
+        stats: { size },
+        mode: 0o100644,
+      });
+    }
+
+    await archive.finalize();
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+// Obtener el ID de un archivo
+app.get("/api/datasets/:id/assets/:assetId", verifyToken, async (req, res) => {
+  try {
+    const { id, assetId } = req.params;
+    if (!isMongoObjectId(id)) return res.status(400).json({ error: "bad id" });
+
+    const datasetUUID = cassTypes.Uuid.fromString(objectIdToUuid(id));
+    const assetUuid = cassTypes.TimeUuid.fromString(assetId);
+
+    const rs = await cassandraClient.execute(
+      "SELECT name, kind, amount_of_bytes, blob_data FROM files WHERE dataset_id = ? AND id = ?",
+      [datasetUUID, assetUuid],
+      { prepare: true }
+    );
+    const row = rs.rows?.[0];
+    if (!row) return res.status(404).json({ error: "Asset not found" });
+
+    const ct = mime.lookup(row.name || "") || "application/octet-stream";
+
+    res.setHeader("Content-Type", ct);
+    res.setHeader(
+      "Content-Length",
+      String(
+        Number(
+          row.amount_of_bytes?.toString?.() ||
+            row.amount_of_bytes ||
+            row.blob_data?.length ||
+            0
+        )
+      )
+    );
+
+    res.send(row.blob_data);
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+// Borrar los comentarios cuando se elimina un dataset
+async function deleteAllCommentsForDataset(ds) {
+  const keys = new Set();
+
+  const mongoId = String(ds._id);
+  keys.add(`comentarios:post:${mongoId}`);
+
+  if (ds.datasetId && String(ds.datasetId) !== mongoId) {
+    keys.add(`comentarios:post:${ds.datasetId}`);
+  }
+  const patterns = [
+    `comentarios:post:${mongoId}*`,
+    ds.datasetId ? `comentarios:post:${ds.datasetId}*` : null,
+  ].filter(Boolean);
+
+  let removed = 0;
+
+  for (const k of keys) removed += await redisClient.del(k);
+  for (const p of patterns) {
+    for await (const key of redisClient.scanIterator({
+      MATCH: p,
+      COUNT: 1000,
+    })) {
+      removed += await redisClient.del(key);
+    }
+  }
+
+  return removed;
+}
+//Borrar dataset
+app.delete("/api/datasets/:id", verifyToken, async (req, res) => {
+  const { id } = req.params;
+  try {
+    if (!isMongoObjectId(id)) return res.status(400).json({ error: "bad id" });
+
+    // Encontrar el dataset
+    const ds = await Dataset.findById(id);
+    if (!ds) return res.status(404).json({ error: "not found" });
+
+    const isOwner = String(ds.owner) === String(req.userId);
+    const isAdmin = req.userRole === "admin";
+    if (!isOwner && !isAdmin) {
+      return res.status(403).json({ error: "forbidden" });
+    }
+
+    const result = {
+      mongo: false,
+      cassandra: false,
+      redis: false,
+      neo4j: false,
+      warnings: [],
+    };
+
+    // Remover info en Mongo
+    await Dataset.deleteOne({ _id: id });
+    result.mongo = true;
+
+    // Remover archivos de Cassandra
+    try {
+      const datasetUUID = cassTypes.Uuid.fromString(objectIdToUuid(id));
+      await cassandraClient.execute(
+        "DELETE FROM files WHERE dataset_id = ?",
+        [datasetUUID],
+        { prepare: true }
+      );
+      result.cassandra = true;
+    } catch (e) {
+      result.warnings.push("Cassandra delete failed: " + e.message);
+    }
+
+    // Remover archivos de Redis
+    try {
+      const removed = await deleteAllCommentsForDataset(ds);
+      result.redis = true;
+      if (!removed) result.warnings.push("No Redis comment list found.");
+    } catch (e) {
+      result.warnings.push("Redis delete failed: " + e.message);
+    }
+
+    // Remover nodos de Neo4j
+
+    return res.json({ ok: true, removed: result });
   } catch (e) {
     return res.status(500).json({ error: e.message });
   }

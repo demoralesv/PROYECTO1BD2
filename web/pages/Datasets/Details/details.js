@@ -66,7 +66,7 @@ const datasetView = () => {
     @media (max-width: 900px){ .lists{ grid-template-columns:1fr } }
     .chip-list{ display:flex; flex-wrap:wrap; gap:8px }
     .chip{ display:flex; align-items:center; gap:8px; padding:6px 10px; border:1px solid var(--line); border-radius:10px; background:#0f1217; max-width:100% }
-    .chip .name{ white-space:nowrap; overflow:hidden; text-overflow:ellipsis; max-width:280px }
+    .chip .name{ white-space:nowrap; overflow:hidden; text-overflow:ellipsis; max-width:280px; color: var(--text) }
     .video-grid{ display:grid; grid-template-columns:repeat(auto-fill, minmax(180px, 1fr)); gap:10px }
     .video-wrap{ position:relative; border:1px solid var(--line); border-radius:10px; overflow:hidden; background:#0f1217; height:160px }
     .video-wrap video{ width:100%; height:100%; object-fit:cover }
@@ -141,25 +141,27 @@ const datasetView = () => {
         <h3 class="section-title">Files & Videos</h3>
         <div class="lists">
             <div>
-            <div class="muted" style="margin-bottom:6px">Files</div>
-            <div id="fileList" class="box chip-list">
-                <span class="muted">No files yet</span>
-            </div>
-            </div>
-            <div>
-            <div class="muted" style="margin-bottom:6px">Videos</div>
-            <div id="videoList" class="box">
-                <div class="video-grid" id="videoGrid">
-                <span class="muted">No videos yet</span>
+                <div class="muted" style="margin-bottom:6px">
+                    <span data-files-header>Files</span>
+                </div>
+                <div id="fileList" class="box chip-list">
+                    <span class="muted">No files yet</span>
                 </div>
             </div>
+            <div>
+                <div class="muted" style="margin-bottom:6px">Videos</div>
+                <div id="videoList" class="box">
+                    <div class="video-grid" id="videoGrid">
+                    <span class="muted">No videos yet</span>
+                    </div>
+                </div>
             </div>
         </div>
 
         <div class="footer-actions" data-owneronly>
             <button id="btnEdit" class="btn">Edit</button>
             <button id="btnSubmit" class="btn primary">Submit for review</button>
-            <button id="btnDelete" class="btn danger" disabled>Delete</button>
+            <button id="btnDelete" class="btn danger">Delete</button>
         </div>
 
         <div id="status" class="muted" style="min-height:20px"></div>
@@ -279,7 +281,7 @@ const datasetView = () => {
 
         wrap.innerHTML = "";
 
-        // presentar el promedio y la cantidad de votos
+        // Presentar el promedio y la cantidad de votos
         var avg = Number(ds.ratingAvg || 0);
         var cnt = Number(ds.ratingCount || 0);
         meta.textContent = cnt ? (avg.toFixed(1) + " / 5 · " + cnt + " vote" + (cnt===1?"":"s")) : "No votes yet";
@@ -304,7 +306,7 @@ const datasetView = () => {
         b.textContent = i<=current ? "★" : "☆";
         if (!canVote) b.disabled = true;
 
-        // Mostrar como se llenan con el mouse
+        // Mostrar cómo se llenan con el mouse
         b.addEventListener("mouseenter", function(){
             for (let k=0;k<wrap.children.length;k++){
             var node = wrap.children[k];
@@ -351,6 +353,35 @@ const datasetView = () => {
             node.setAttribute("aria-checked", String(on));
         }
         });
+    }
+
+    // Archivos
+    function bytesFmt(n){
+        if (!n) return "0 B";
+        const u = ["B","KB","MB","GB","TB"];
+        const i = Math.floor(Math.log(n)/Math.log(1024));
+        return (n/Math.pow(1024, i)).toFixed(i ? 1 : 0) + " " + u[i];
+    }
+    function authFetch(path, opts = {}) {
+        const headers = Object.assign({}, authHeaders(), opts.headers || {});
+        return fetch(API + path, { ...opts, headers });
+    }
+
+    async function downloadBlob(path, filename){
+        const r = await authFetch(path);
+        if (!r.ok) {
+            const err = await r.text().catch(()=>r.statusText);
+            throw new Error(err || r.statusText);
+        }
+        const blob = await r.blob();
+        const url  = URL.createObjectURL(blob);
+        const a = document.createElement("a");
+        a.href = url;
+        a.download = filename || "download";
+        document.body.appendChild(a);
+        a.click();
+        a.remove();
+        setTimeout(()=>URL.revokeObjectURL(url), 5000);
     }
 
     // Comentarios
@@ -616,6 +647,88 @@ const datasetView = () => {
         setText("dsDesc", ds.description || "—");
         setStatusPill(ds.status);
 
+        const datasetMongoId = ds._id;
+        if (!datasetMongoId) { setText("status", "Missing dataset id"); return; }
+
+        // Archivos y videos
+        const idForAssets = ds._id;
+        if (!idForAssets) { setText("status", "Missing dataset id"); return; }
+
+        authFetch("/api/datasets/" + encodeURIComponent(datasetMongoId) + "/assets")
+        .then(r => {
+            if (!r.ok) return r.text().then(t => { throw new Error(t || r.statusText); });
+            return r.json();
+        })
+        .then(function (list) {
+            // Archivos
+            const fileList = $("fileList");
+            if (fileList) {
+            fileList.innerHTML = "";
+
+            const totalBytes = (list.files || []).reduce((a, f) => a + (f.bytes || 0), 0);
+            const filesHeader = document.querySelector('[data-files-header]');
+            if (filesHeader) filesHeader.textContent = "Files · " + bytesFmt(totalBytes);
+
+            if (list.files && list.files.length) {
+                list.files.forEach(function (f) {
+                const btn = document.createElement("button");
+                btn.type = "button";
+                btn.className = "chip";
+                btn.innerHTML =
+                    '<span class="muted" style="font-size:.85rem">FILE</span>' +
+                    '<span class="name" title="' + (f.name || "") + '">' +
+                    (f.name || "unnamed") + "</span>" +
+                    " <span class='muted'>· " + bytesFmt(f.bytes) + "</span>";
+
+                btn.addEventListener("click", function () {
+                    const path = "/api/datasets/" + encodeURIComponent(datasetMongoId) +
+                                "/assets/" + encodeURIComponent(f.assetId);
+                    downloadBlob(path, f.name || "file");
+                });
+
+                fileList.appendChild(btn);
+                });
+            } else {
+                fileList.innerHTML = '<span class="muted">No files yet</span>';
+            }
+            }
+
+            // Videos
+            const videoGrid = $("videoGrid");
+            if (videoGrid) {
+            videoGrid.innerHTML = "";
+            if (list.videos && list.videos.length) {
+                list.videos.forEach(function (v) {
+                const wrap = document.createElement("div");
+                wrap.className = "video-wrap";
+
+                const videoEl = document.createElement("video");
+                videoEl.controls = true;
+                videoEl.preload  = "metadata";
+                videoEl.style.width = "100%";
+                videoEl.style.height = "100%";
+                videoEl.style.objectFit = "cover";
+                wrap.appendChild(videoEl);
+                videoGrid.appendChild(wrap);
+
+                const assetPath = "/api/datasets/" + encodeURIComponent(datasetMongoId) +
+                                    "/assets/" + encodeURIComponent(v.assetId);
+
+                authFetch(assetPath)
+                    .then(r => { if (!r.ok) throw new Error("Failed to load video"); return r.blob(); })
+                    .then(blob => { videoEl.src = URL.createObjectURL(blob); })
+                    .catch(() => { wrap.innerHTML = '<span class="muted">Failed to load video</span>'; });
+                });
+            } else {
+                videoGrid.innerHTML = '<span class="muted">No videos yet</span>';
+            }
+            }
+        })
+        .catch(function (e) {
+            console.error("Assets load failed:", e);
+            setText("status", "Assets: " + (e && e.message ? e.message : "Failed to load assets"));
+        });
+
         // Descargas
         var downloads = Number.isFinite(ds.downloads) ? ds.downloads : 0;
         var downloadsLink = $("downloadsLink");
@@ -627,87 +740,51 @@ const datasetView = () => {
         });
         }
 
-        // Archivos
-        var fileList = $("fileList");
-        if (fileList) {
-        fileList.innerHTML = "";
-        if (Array.isArray(ds.files) && ds.files.length){
-            ds.files.forEach(function(f){
-            var chip = document.createElement("div");
-            chip.className = "chip";
-            chip.innerHTML =
-                '<span class="muted" style="font-size:.85rem">' + (f.type || 'file') + '</span>' +
-                '<span class="name" title="'+ (f.name || '') +'">' + (f.name || 'unnamed') + '</span>';
-            fileList.appendChild(chip);
-            });
-        } else {
-            fileList.innerHTML = '<span class="muted">No files yet</span>';
-        }
-        }
-
-        // Videos
-        var videoGrid = $("videoGrid");
-        if (videoGrid) {
-        videoGrid.innerHTML = "";
-        if (Array.isArray(ds.videos) && ds.videos.length){
-            ds.videos.forEach(function(v){
-            var wrap = document.createElement("div");
-            wrap.className = "video-wrap";
-            wrap.innerHTML = '<video controls></video>';
-            // wrap.querySelector("video").src = v.url;
-            videoGrid.appendChild(wrap);
-            });
-        } else {
-            videoGrid.innerHTML = '<span class="muted">No videos yet</span>';
-        }
-        }
-
         // Botones
-        var btnDownload = $("btnDownload");
-        if (btnDownload){
-        btnDownload.addEventListener("click", function(){
-            alert("Download will be implemented later.");
-        });
+        const btnDownload = $("btnDownload");
+        const btnEdit     = $("btnEdit");
+        const btnSubmit   = $("btnSubmit");
+        const btnDelete   = $("btnDelete");
+        // Descargar un .zip
+        btnDownload?.addEventListener("click", async function(){
+        try {
+            await downloadBlob(
+            "/api/datasets/" + encodeURIComponent(datasetMongoId) + "/download",
+            (ds.name || "dataset") + ".zip"
+            );
+        } catch (e) {
+            setText("status", e.message || "Failed to download");
         }
-
-        var btnEdit = $("btnEdit");
-        if (btnEdit){
-        btnEdit.addEventListener("click", function () {
-            var id = ds.datasetId || ds.id || ds._id;
-            if (!id) { alert("Missing dataset id"); return; }
-            window.location.href = "/datasets/" + encodeURIComponent(id) + "/edit";
         });
-        }
 
-        var btnSubmit = $("btnSubmit");
-        if (btnSubmit){
-        btnSubmit.addEventListener("click", function(){
-            setText("status", "Submitting…");
-            apiPost("/api/datasets/" + encodeURIComponent(ds.datasetId || ds.id || ds._id) + "/submit")
-            .then(function(resp){
-                setText("status", "Submitted ✔");
-                setStatusPill(resp.status || "submitted");
+        // Botón de editar
+        btnEdit?.addEventListener("click", function () {
+        window.location.href = "/datasets/" + encodeURIComponent(datasetMongoId) + "/edit";
+        });
+
+        // Ingresar para que se revise
+        btnSubmit?.addEventListener("click", function(){
+        setText("status", "Submitting…");
+        apiPost("/api/datasets/" + encodeURIComponent(datasetMongoId) + "/submit")
+            .then(resp => {
+            setText("status", "Submitted ✔");
+            setStatusPill(resp.status || "submitted");
             })
-            .catch(function(e){ setText("status", e.message); });
-        });
-        }
-
-        var btnDelete = $("btnDelete");
-        if (btnDelete){
-        btnDelete.disabled = false;
-        btnDelete.addEventListener("click", function(){
-            if (!confirm("Delete this dataset? This cannot be undone.")) return;
-            setText("status", "Deleting…");
-            var toDelete = ds.datasetId || ds.id || ds._id;
-            fetch(API + "/api/datasets/" + encodeURIComponent(toDelete), {
-            method: "DELETE",
-            headers: Object.assign({ "Content-Type":"application/json" }, authHeaders())
-            })
-            .then(r => r.ok ? r.json() : r.json().then(d=>{throw new Error(d.error||r.statusText)}))
-            .then(() => { setText("status", "Deleted ✔"); window.location.href = "/profile"; })
             .catch(e => setText("status", e.message));
         });
-        }
+
+        // Borrar dataset, sus comentarios y sus archivos
+        btnDelete?.addEventListener("click", function(){
+        if (!confirm("Delete this dataset? This cannot be undone.")) return;
+        setText("status", "Deleting…");
+        fetch(API + "/api/datasets/" + encodeURIComponent(datasetMongoId), {
+            method: "DELETE",
+            headers: Object.assign({ "Content-Type":"application/json" }, authHeaders())
+        })
+        .then(r => r.ok ? r.json() : r.json().then(d=>{throw new Error(d.error||r.statusText)}))
+        .then(() => { setText("status", "Deleted ✔"); window.location.href = "/profile"; })
+        .catch(e => setText("status", e.message));
+        });
 
         // Comentarios
         var postId = ds.datasetId || ds._id;
