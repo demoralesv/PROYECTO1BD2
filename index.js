@@ -201,9 +201,9 @@ app.get("/me", verifyToken, async (req, res) => {
     res.status(500).json({ error: err.message });
   }
 });
-
-// Crear dataset
+// Crear un dataset
 app.post("/datasets", verifyToken, async (req, res) => {
+  const session = driver.session();
   try {
     const { name, description, datasetAvatarUrl } = req.body;
     if (!name || !description) {
@@ -213,13 +213,39 @@ app.post("/datasets", verifyToken, async (req, res) => {
     }
 
     const ds = new Dataset({
-      owner: req.userId,
+      owner: req.userId, // comes from verifyToken
       name,
       description,
       datasetAvatarUrl: datasetAvatarUrl || null,
     });
 
     await ds.save();
+
+    // Crear un nodo en Neo4j
+    const params = {
+      id: ds._id.toString(),
+      userId: req.userId.toString(),
+      name: ds.name,
+      avatar: ds.datasetAvatarUrl || null,
+      createdAt: ds.createdAt.toISOString(),
+    };
+
+    await session.executeWrite((tx) =>
+      tx.run(
+        `
+        MERGE (d:Dataset {ID: $id})
+        ON CREATE SET
+          d.UserID          = $userId,
+          d.name            = $name,
+          d.downloadsCount  = 0,
+          d.ratingCount     = 0,
+          d.ratingSum       = 0,
+          d.ratingAvg       = 0.0,
+          d.createdAt       = $createdAt
+        `,
+        params
+      )
+    );
 
     res.json({
       _id: ds._id,
@@ -233,6 +259,8 @@ app.post("/datasets", verifyToken, async (req, res) => {
     });
   } catch (err) {
     res.status(500).json({ error: err.message });
+  } finally {
+    await session.close();
   }
 });
 // Cambiar estado de dataset a Submitted
@@ -364,33 +392,72 @@ app.get("/api/datasets/:id", tryAuth, async (req, res) => {
 
     const pid = String(ds._id);
 
-    res.json({
-      _id: pid,
-      id: pid,
-      datasetId: ds.datasetId || pid,
-      name: ds.name,
-      description: ds.description,
-      datasetAvatarUrl: ds.datasetAvatarUrl || null,
-      status: ds.status,
-      owner: ds.owner
-        ? {
-            id: String(ds.owner._id),
-            username: ds.owner.username || "",
-            fullName: ds.owner.fullname || ds.owner.fullName || "",
-            avatarUrl: ds.owner.avatarUrl || null,
-          }
-        : null,
-      files: [],
-      videos: [],
-      createdAt: ds.createdAt,
-      updatedAt: ds.updatedAt,
-    });
+    const session = driver.session();
+    try {
+      const dsId = String(ds._id);
+      const meId = req.userId ? String(req.userId) : null;
+
+      const neo = await session.executeRead((tx) =>
+        tx.run(
+          `
+          // Always return one row; even if the node isn't in Neo4j yet
+          WITH 1 AS _
+          OPTIONAL MATCH (d:Dataset {ID:$dsId})
+          OPTIONAL MATCH (me:User {ID:$meId})-[mv:VOTED]->(d)
+          RETURN
+            coalesce(d.ratingCount, 0)    AS ratingCount,
+            coalesce(d.ratingAvg,   0.0)  AS ratingAvg,
+            coalesce(d.downloadsCount, 0) AS downloadsCount,
+            mv.value                       AS myVote
+          `,
+          { dsId, meId }
+        )
+      );
+
+      const rec = neo.records[0];
+      const toNum = (x) =>
+        x && typeof x.toNumber === "function" ? x.toNumber() : x;
+
+      const ratingCount = rec ? toNum(rec.get("ratingCount")) : 0;
+      const ratingAvg = rec ? Number(rec.get("ratingAvg") ?? 0) : 0;
+      const downloadsCount = rec ? toNum(rec.get("downloadsCount")) : 0;
+      const myVote = rec ? toNum(rec.get("myVote")) : null;
+
+      return res.json({
+        _id: String(ds._id),
+        id: String(ds._id),
+        datasetId: ds.datasetId || String(ds._id),
+        name: ds.name,
+        description: ds.description,
+        datasetAvatarUrl: ds.datasetAvatarUrl || null,
+        status: ds.status,
+        owner: ds.owner
+          ? {
+              id: String(ds.owner._id),
+              username: ds.owner.username || "",
+              fullName: ds.owner.fullname || ds.owner.fullName || "",
+              avatarUrl: ds.owner.avatarUrl || null,
+            }
+          : null,
+        files: [],
+        videos: [],
+        createdAt: ds.createdAt,
+        updatedAt: ds.updatedAt,
+        ratingAvg,
+        ratingCount,
+        downloadsCount,
+        myVote,
+      });
+    } finally {
+      await session.close();
+    }
   } catch (e) {
     res.status(500).json({ error: e.message });
   }
 });
 // Votos en un dataset
 app.post("/api/datasets/:id/votes", verifyToken, async (req, res) => {
+  const session = driver.session();
   try {
     const { id } = req.params;
     const { value } = req.body;
@@ -402,19 +469,58 @@ app.post("/api/datasets/:id/votes", verifyToken, async (req, res) => {
     let ds = await Dataset.findOne({ datasetId: id }).lean();
     if (!ds && mongoose.isValidObjectId(id))
       ds = await Dataset.findById(id).lean();
-    if (ds && String(ds.owner) === String(req.userId)) {
+    if (!ds) return res.status(404).json({ error: "Dataset not found" });
+    if (String(ds.owner) === String(req.userId)) {
       return res
         .status(403)
         .json({ error: "Owners cannot vote their own dataset" });
     }
 
-    // Por ahora
-    console.log("Vote (stub):", { datasetId: id, user: req.userId, value });
+    const dsId = String(ds._id);
+    const userId = String(req.userId);
 
-    // Por ahora funciona esto. Ver con Neo4j después
-    return res.json({ ratingAvg: value, ratingCount: 1 });
+    const result = await session.executeWrite(async (tx) => {
+      await tx.run(`MERGE (:User {ID:$userId})`, { userId });
+      await tx.run(`MERGE (:Dataset {ID:$dsId})`, { dsId });
+
+      const r = await tx.run(
+        `
+        MATCH (u:User {ID:$userId}), (d:Dataset {ID:$dsId})
+        MERGE (u)-[v:VOTED]->(d)
+        ON CREATE SET
+          v.value = $value, v.at = datetime(),
+          d.ratingCount = coalesce(d.ratingCount,0) + 1,
+          d.ratingSum   = coalesce(d.ratingSum,0) + $value
+        ON MATCH
+          SET v.prev = v.value,
+              v.value = $value, v.at = datetime(),
+              d.ratingSum = coalesce(d.ratingSum,0) + $value - coalesce(v.prev,0)
+        WITH d
+        SET d.ratingAvg =
+          CASE WHEN coalesce(d.ratingCount,0) = 0 THEN 0.0
+               ELSE toFloat(coalesce(d.ratingSum,0)) / toFloat(d.ratingCount)
+          END
+        RETURN coalesce(d.ratingAvg,0.0) AS ratingAvg,
+               coalesce(d.ratingCount,0) AS ratingCount
+        `,
+        { userId, dsId, value }
+      );
+
+      const rec = r.records[0];
+      const toNum = (x) =>
+        x && typeof x.toNumber === "function" ? x.toNumber() : x;
+
+      return {
+        ratingAvg: Number(rec?.get("ratingAvg") ?? 0),
+        ratingCount: toNum(rec?.get("ratingCount") ?? 0),
+      };
+    });
+
+    res.json(result);
   } catch (e) {
-    return res.status(500).json({ error: e.message });
+    res.status(500).json({ error: e.message });
+  } finally {
+    await session.close();
   }
 });
 // El ID del dataset
@@ -786,6 +892,25 @@ app.delete("/api/datasets/:id", verifyToken, async (req, res) => {
     }
 
     // Remover nodos de Neo4j
+    const session = driver.session();
+    try {
+      const neo = await session.executeWrite((tx) =>
+        tx.run(
+          `
+          MATCH (d:Dataset {ID: $id})
+          DETACH DELETE d
+          RETURN 1 AS ok
+          `,
+          { id: String(id) }
+        )
+      );
+
+      result.neo4j = neo.records.length > 0;
+    } catch (e) {
+      result.warnings.push("Neo4j delete failed: " + e.message);
+    } finally {
+      await session.close();
+    }
 
     return res.json({ ok: true, removed: result });
   } catch (e) {

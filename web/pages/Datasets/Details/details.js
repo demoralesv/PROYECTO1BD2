@@ -275,84 +275,75 @@ const datasetView = () => {
 
     // Votaciones
     function initVoting(ds, ctx){
-        var wrap = $("ratingStars");
-        var meta = $("ratingMeta");
-        if (!wrap || !meta) return;
+    const wrap = $("ratingStars");
+    const meta = $("ratingMeta");
+    if (!wrap || !meta) return;
 
-        wrap.innerHTML = "";
+    wrap.innerHTML = "";
 
-        // Presentar el promedio y la cantidad de votos
-        var avg = Number(ds.ratingAvg || 0);
-        var cnt = Number(ds.ratingCount || 0);
-        meta.textContent = cnt ? (avg.toFixed(1) + " / 5 · " + cnt + " vote" + (cnt===1?"":"s")) : "No votes yet";
+    const cnt = Number.isFinite(ds.ratingCount) ? ds.ratingCount : 0;
+    const avg = Number.isFinite(ds.ratingAvg) ? Number(ds.ratingAvg) : 0;
+    meta.textContent = cnt ? (avg.toFixed(1) + " / 5 · " + cnt + " vote" + (cnt===1?"":"s")) : "No votes yet";
 
-        // Se puede cambiar el voto
-        var localKey = "vote:" + (ds.datasetId || ds._id || ds.id || "");
-        var lastLocal = Number(localStorage.getItem(localKey));
-        var current = (Number.isFinite(lastLocal) && lastLocal >= 1 && lastLocal <= 5)
-        ? lastLocal
-        : (Math.round(avg) || 0);
+    // Mostar el voto si ya un usuario votó en el pasado
+    let current = (Number.isFinite(ds.myVote) && ds.myVote >= 1 && ds.myVote <= 5) ? ds.myVote : 0;
+    let canVote = !ctx.isOwner;
 
-        var canVote = !ctx.isOwner; // Los dueños no votan
-
-        // Ver las 5 estrellas
-        for (let i=1;i<=5;i++){
-        var b = document.createElement("button");
+    for (let i=1; i<=5; i++){
+        const b = document.createElement("button");
         b.className = "star";
         b.type = "button";
         b.setAttribute("role","radio");
         b.setAttribute("aria-label", i + " star" + (i>1?"s":""));
-        b.setAttribute("aria-checked", String(i<=current));
-        b.textContent = i<=current ? "★" : "☆";
+        const on = i <= current;
+        b.setAttribute("aria-checked", String(on));
+        b.textContent = on ? "★" : "☆";
         if (!canVote) b.disabled = true;
 
-        // Mostrar cómo se llenan con el mouse
         b.addEventListener("mouseenter", function(){
-            for (let k=0;k<wrap.children.length;k++){
-            var node = wrap.children[k];
-            node.textContent = (k < i) ? "★" : "☆";
-            node.setAttribute("aria-checked", String(k < i));
-            }
+        for (let k=0; k<wrap.children.length; k++){
+            const node = wrap.children[k];
+            const hoverOn = (k+1) <= i;
+            node.textContent = hoverOn ? "★" : "☆";
+            node.setAttribute("aria-checked", String(hoverOn));
+        }
         });
 
-        // Click para votar
         b.addEventListener("click", function(){
-            if (!canVote) return;
-            var val = i;
+        if (!canVote) return;
+        const val = i;
+        current = val;
 
-            current = val;
-            for (let k=0;k<wrap.children.length;k++){
-            var on = (k+1) <= current;
-            var node = wrap.children[k];
-            node.textContent = on ? "★" : "☆";
-            node.setAttribute("aria-checked", String(on));
-            }
-            meta.textContent = "Submitting vote…";
+        for (let k=0; k<wrap.children.length; k++){
+            const node = wrap.children[k];
+            const on2 = (k+1) <= current;
+            node.textContent = on2 ? "★" : "☆";
+            node.setAttribute("aria-checked", String(on2));
+        }
+        meta.textContent = "Submitting vote…";
 
-            apiPost("/api/datasets/" + encodeURIComponent(ds.datasetId || ds.id || ds._id) + "/votes", { value: val })
+        apiPost("/api/datasets/" + encodeURIComponent(ds.datasetId || ds.id || ds._id) + "/votes", { value: val })
             .then(function(r){
-                var newAvg = Number((r && r.ratingAvg) != null ? r.ratingAvg : avg);
-                var newCnt = Number((r && r.ratingCount) != null ? r.ratingCount : (cnt + 1));
-                meta.textContent = newAvg.toFixed(1) + " / 5 · " + newCnt + " vote" + (newCnt===1?"":"s");
-                localStorage.setItem(localKey, String(val));
+            const newAvg = Number((r && r.ratingAvg) != null ? r.ratingAvg : avg);
+            const newCnt = Number((r && r.ratingCount) != null ? r.ratingCount : cnt);
+            meta.textContent = newAvg.toFixed(1) + " / 5 · " + newCnt + " vote" + (newCnt===1?"":"s");
             })
             .catch(function(e){
-                meta.textContent = (e && e.message) ? e.message : "Failed to submit vote";
+            meta.textContent = (e && e.message) ? e.message : "Failed to submit vote";
             });
         });
 
         wrap.appendChild(b);
-        }
+    }
 
-        // Mostrar selección
-        wrap.addEventListener("mouseleave", function(){
-        for (let k=0;k<wrap.children.length;k++){
-            var on = (k+1) <= current;
-            var node = wrap.children[k];
-            node.textContent = on ? "★" : "☆";
-            node.setAttribute("aria-checked", String(on));
+    wrap.addEventListener("mouseleave", function(){
+        for (let k=0; k<wrap.children.length; k++){
+        const node = wrap.children[k];
+        const on = (k+1) <= current;
+        node.textContent = on ? "★" : "☆";
+        node.setAttribute("aria-checked", String(on));
         }
-        });
+    });
     }
 
     // Archivos
@@ -730,7 +721,7 @@ const datasetView = () => {
         });
 
         // Descargas
-        var downloads = Number.isFinite(ds.downloads) ? ds.downloads : 0;
+        var downloads = Number.isFinite(ds.downloadsCount) ? ds.downloadsCount : 0;
         var downloadsLink = $("downloadsLink");
         if (downloadsLink) {
         downloadsLink.textContent = downloads + (downloads === 1 ? " download" : " downloads");
