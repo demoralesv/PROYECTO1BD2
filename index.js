@@ -22,6 +22,7 @@ import datasetEdit from "./web/pages/Datasets/Edit/datasetEdit.js";
 import connectDB from "./src/databases/mongo.js";
 import followers from "./web/pages/Followers-Following/Followers/followers.js";
 import following from "./web/pages/Followers-Following/Following/following.js";
+import chatPage from "./web/pages/Chat/chat.js";
 import searchPage from "./web/pages/Search/search.js";
 import getFollowers from "./src/routes/getFollowers.js";
 import getFollowing from "./src/routes/getFollowing.js";
@@ -98,6 +99,10 @@ app.get("/followers", (req, res) => {
 //ver siguiendo
 app.get("/following", (req, res) => {
   res.send(following());
+});
+// Chats
+app.get("/chat", (req, res) => {
+  res.send(chatPage());
 });
 
 // Crear un dataset

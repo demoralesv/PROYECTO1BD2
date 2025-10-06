@@ -296,7 +296,7 @@ const profile = () => {
             window.location.href = "/datasets/new";
           });
           $("btnMessages").addEventListener("click", function(){
-            window.location.href = "/messages.html";
+            window.location.href = "/chat";
           });
           $("btnEdit").addEventListener("click", function(){
             window.location.href = "/profile/edit";
@@ -321,7 +321,6 @@ const profile = () => {
           }
 
           $("btnBackLogin").addEventListener("click", function(){
-            // Clear token then go to login
             localStorage.removeItem("token");
             window.location.href = "/";
           });

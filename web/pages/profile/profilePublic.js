@@ -93,7 +93,6 @@ const profilePublic = () => {
         </div>
 
         <div class="top-actions">
-          <a id="btnMessages" class="btn">Messages</a>
           <button id="btnHome" class="btn icon" title="Home">🏠</button>
         </div>
       </header>
@@ -435,7 +434,6 @@ const profilePublic = () => {
           }
 
           // Topbar
-          $("btnMessages").addEventListener("click", function(){ window.location.href = "/messages.html"; });
           $("btnHome").addEventListener("click", function(){ window.location.href = "/home"; });
           var btnSearch = $("btnSearch");
           var inputQ = $("q");
