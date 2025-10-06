@@ -324,13 +324,12 @@ app.put("/api/datasets/:id", verifyToken, async (req, res) => {
 });
 // Obtener los datasets (míos o de otro usuario por username)
 app.get("/datasets", verifyToken, async (req, res) => {
+  const session = driver.session();
   try {
     const { mine, owner, status } = req.query;
     const filter = {};
 
-    if (String(mine).toLowerCase() === "true") {
-      filter.owner = req.userId;
-    }
+    if (String(mine).toLowerCase() === "true") filter.owner = req.userId;
     if (owner) {
       const u = await User.findOne({ username: owner }, { _id: 1 }).lean();
       if (!u) return res.json({ items: [], total: 0 });
@@ -341,9 +340,46 @@ app.get("/datasets", verifyToken, async (req, res) => {
     const items = await Dataset.find(filter).sort({ createdAt: -1 }).lean();
     const total = await Dataset.countDocuments(filter);
 
+    // 🔎 Pull rating+downloads from Neo4j for ALL datasets at once
+    const ids = items.map((d) => String(d._id));
+    let metricsById = new Map();
+    if (ids.length) {
+      const r = await session.executeRead((tx) =>
+        tx.run(
+          `
+          UNWIND $ids AS id
+          OPTIONAL MATCH (d:Dataset {ID:id})
+          RETURN id,
+                 coalesce(d.ratingAvg,0.0)      AS ratingAvg,
+                 coalesce(d.ratingCount,0)       AS ratingCount,
+                 coalesce(d.downloadsCount,0)    AS downloadsCount
+          `,
+          { ids }
+        )
+      );
+      const toNum = (x) =>
+        x && typeof x.toNumber === "function" ? x.toNumber() : x;
+      for (const rec of r.records) {
+        const id = rec.get("id");
+        const avg = Number(rec.get("ratingAvg") ?? 0);
+        const cnt = toNum(rec.get("ratingCount") ?? 0);
+        const dls = toNum(rec.get("downloadsCount") ?? 0);
+        metricsById.set(id, {
+          ratingAvg: avg,
+          ratingCount: cnt,
+          downloadsCount: dls,
+        });
+      }
+    }
+
     res.json({
       items: items.map((d) => {
         const pid = String(d._id);
+        const m = metricsById.get(pid) || {
+          ratingAvg: 0,
+          ratingCount: 0,
+          downloadsCount: 0,
+        };
         return {
           _id: pid,
           id: pid,
@@ -351,14 +387,18 @@ app.get("/datasets", verifyToken, async (req, res) => {
           name: d.name,
           description: d.description,
           status: d.status,
-          votes: d.votes ?? 0,
-          updatedAt: d.updatedAt,
+          // ⬇️ new fields from Neo4j
+          ratingAvg: m.ratingAvg,
+          ratingCount: m.ratingCount,
+          downloadsCount: m.downloadsCount,
         };
       }),
       total,
     });
   } catch (err) {
     res.status(500).json({ error: err.message });
+  } finally {
+    await session.close();
   }
 });
 // Obtener info de un dataset
