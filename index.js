@@ -787,6 +787,48 @@ app.delete("/api/datasets/:id", verifyToken, async (req, res) => {
     return res.status(500).json({ error: e.message });
   }
 });
+// Borrar archivos en pantalla de editar
+async function deleteAssetHandler(req, res) {
+  try {
+    const { id: datasetId, assetId } = req.params;
+    if (!isMongoObjectId(datasetId))
+      return res.status(400).json({ error: "bad id" });
+    if (!assetId) return res.status(400).json({ error: "assetId is required" });
+
+    const ds = await Dataset.findById(datasetId).lean();
+    if (!ds) return res.status(404).json({ error: "Dataset not found" });
+    if (String(ds.owner) !== String(req.userId)) {
+      return res.status(403).json({ error: "Not your dataset" });
+    }
+
+    // Borrar archivos en Cassandra
+    const datasetUUID = cassTypes.Uuid.fromString(objectIdToUuid(datasetId));
+    const assetUuid = cassTypes.TimeUuid.fromString(assetId);
+
+    await cassandraClient.execute(
+      "DELETE FROM files WHERE dataset_id = ? AND id = ?",
+      [datasetUUID, assetUuid],
+      { prepare: true }
+    );
+
+    // Cambiar estado del dataset y modificar fecha y hora de cambio
+    await Dataset.updateOne(
+      { _id: datasetId },
+      { $set: { status: "pending" } }
+    );
+
+    return res.status(204).end();
+  } catch (e) {
+    return res.status(500).json({ error: e.message });
+  }
+}
+// Borrar archivos y videos
+app.delete(
+  "/api/datasets/:id/assets/:assetId",
+  verifyToken,
+  deleteAssetHandler
+);
+app.delete("/datasets/:id/assets/:assetId", verifyToken, deleteAssetHandler);
 
 // publicar un comentario
 app.post("/posts/:postId/comments", postComment);

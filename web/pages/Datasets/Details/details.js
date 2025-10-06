@@ -758,8 +758,9 @@ const datasetView = () => {
         });
 
         // Botón de editar
-        btnEdit?.addEventListener("click", function () {
-        window.location.href = "/datasets/" + encodeURIComponent(datasetMongoId) + "/edit";
+        btnEdit?.addEventListener("click", (e) => {
+            const url = "/datasets/" + encodeURIComponent(datasetMongoId) + "/edit";
+            location.replace(url);
         });
 
         // Ingresar para que se revise
