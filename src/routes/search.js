@@ -1,4 +1,5 @@
 import { Router } from "express";
+import driver from "../databases/neo4j.js";
 import User from "../models/User.js";
 import Dataset from "../models/Dataset.js";
 import { verifyToken } from "./auth.routes.js";
@@ -79,62 +80,74 @@ async function searchUsers(q, { limit, skip }) {
 
 // Búsqueda de datasets
 async function searchDatasets(q, { limit, skip }) {
-  const baseSel =
-    "name description downloads datasetId owner ownerUsername status updatedAt";
-  if (!q) {
-    return await Dataset.find({ status: "approved" })
-      .select(baseSel)
-      .populate("owner", "username")
-      .sort({ updatedAt: -1 })
-      .skip(skip)
-      .limit(limit)
-      .lean();
-  }
+  const baseSel = "_id name status updatedAt owner";
+  const filter = q
+    ? {
+        status: "approved",
+        $or: [
+          { name: { $regex: new RegExp(escapeRegExp(q), "i") } },
+          { description: { $regex: new RegExp(escapeRegExp(q), "i") } },
+          { ownerUsername: { $regex: new RegExp(escapeRegExp(q), "i") } },
+        ],
+      }
+    : { status: "approved" };
 
-  const regex = new RegExp(escapeRegExp(q), "i");
-
-  // Consulta de $text. Es para buscar palabras relevantes
-  let textResults = [];
-  try {
-    textResults = await Dataset.find(
-      { status: "approved", $text: { $search: q, $language: "english" } },
-      { score: { $meta: "textScore" } }
-    )
-      .select(baseSel)
-      .populate("owner", "username")
-      .sort({ score: { $meta: "textScore" } })
-      .limit(200)
-      .lean();
-  } catch (_) {}
-
-  // 2) regex fallback para buscar palabras parciales o prefijos
-  const regexResults = await Dataset.find({
-    status: "approved",
-    $or: [
-      { name: { $regex: regex } },
-      { description: { $regex: regex } },
-      { ownerUsername: { $regex: regex } },
-    ],
-  })
+  // Obtener info de MongoDB
+  const mongoItems = await Dataset.find(filter)
     .select(baseSel)
     .populate("owner", "username")
     .sort({ updatedAt: -1 })
-    .limit(200)
+    .skip(skip)
+    .limit(limit)
     .lean();
 
-  // Obtener los resultados
-  const seen = new Set();
-  const merged = [];
-  for (const r of [...textResults, ...regexResults]) {
-    const id = String(r._id);
-    if (!seen.has(id)) {
-      seen.add(id);
-      merged.push(r);
+  // Obtener info de Neo4j
+  const ids = mongoItems.map((d) => String(d._id));
+  const metricsById = new Map();
+
+  if (ids.length) {
+    const session = driver.session();
+    try {
+      const r = await session.executeRead((tx) =>
+        tx.run(
+          `UNWIND $ids AS id
+           OPTIONAL MATCH (d:Dataset {ID:id})
+           RETURN id,
+                  coalesce(d.ratingAvg, 0.0) AS ratingAvg,
+                  coalesce(d.ratingCount, 0)  AS ratingCount`,
+          { ids }
+        )
+      );
+      const toNum = (x) =>
+        x && typeof x.toNumber === "function" ? x.toNumber() : x;
+      r.records.forEach((rec) => {
+        metricsById.set(rec.get("id"), {
+          ratingAvg: Number(rec.get("ratingAvg") ?? 0),
+          ratingCount: toNum(rec.get("ratingCount") ?? 0),
+        });
+      });
+    } finally {
+      await session.close();
     }
   }
 
-  // Crear páginas de la búsqueda
-  return merged.slice(skip, skip + limit);
+  //Mezclar y obtener toda la info
+  return mongoItems.map((d) => {
+    const m = metricsById.get(String(d._id)) || {
+      ratingAvg: 0,
+      ratingCount: 0,
+    };
+    return {
+      _id: String(d._id),
+      datasetId: String(d._id),
+      name: d.name,
+      status: d.status,
+      updatedAt: d.updatedAt,
+      owner: d.owner ? { username: d.owner.username } : null,
+      ratingAvg: m.ratingAvg,
+      ratingCount: m.ratingCount,
+    };
+  });
 }
 
 // Rutas
@@ -158,8 +171,8 @@ router.get("/api/search/users", verifyToken, async (req, res) => {
 router.get("/api/search/datasets", verifyToken, async (req, res) => {
   const { limit, skip } = normalizeLimitPage(req);
   const q = (req.query.q || "").trim();
-  const ds = await searchDatasets(q, { limit, skip });
-  res.json({ items: ds, limit });
+  const items = await searchDatasets(q, { limit, skip });
+  res.json({ items, limit });
 });
 
 export default router;
