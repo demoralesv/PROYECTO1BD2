@@ -1175,7 +1175,151 @@ app.delete(
   deleteAssetHandler
 );
 app.delete("/datasets/:id/assets/:assetId", verifyToken, deleteAssetHandler);
-// Ver descargas de un dataset
+// Clonar dataset
+app.post("/api/datasets/:id/clone", verifyToken, async (req, res) => {
+  const { id } = req.params;
+
+  async function findDatasetByAnyId(id) {
+    let ds = await Dataset.findOne({ datasetId: id }).populate({
+      path: "owner",
+      select: "_id",
+    });
+    if (!ds && mongoose.isValidObjectId(id)) {
+      ds = await Dataset.findById(id).populate({
+        path: "owner",
+        select: "_id",
+      });
+    }
+    return ds;
+  }
+
+  const sessionNeo = driver.session();
+  let newDsSaved = null;
+
+  try {
+    // 1) Load source dataset
+    const src = await findDatasetByAnyId(id);
+    if (!src) return res.status(404).json({ error: "dataset not found" });
+
+    // 2) Ownership check
+    if (String(src.owner?._id || src.owner) !== String(req.userId)) {
+      return res.status(403).json({ error: "only the owner can clone" });
+    }
+
+    // 3) Create the new dataset in Mongo
+    const now = new Date();
+    const dst = new Dataset({
+      owner: src.owner,
+      name: (src.name || "Untitled") + " (copy)",
+      description: src.description || "",
+      datasetAvatarUrl: src.datasetAvatarUrl || null,
+      status: "pending",
+      ratingAvg: 0,
+      ratingCount: 0,
+      downloadsCount: 0,
+      createdAt: now,
+      updatedAt: now,
+    });
+
+    await dst.save();
+    newDsSaved = dst;
+
+    // 4) Neo4j node
+    const neoParams = {
+      id: dst._id.toString(),
+      userId: (src.owner?._id || src.owner).toString(),
+      name: dst.name,
+      avatar: dst.datasetAvatarUrl || null,
+      createdAt: dst.createdAt.toISOString(),
+    };
+
+    await sessionNeo.executeWrite((tx) =>
+      tx.run(
+        `
+        MERGE (d:Dataset {ID: $id})
+        ON CREATE SET
+          d.UserID          = $userId,
+          d.name            = $name,
+          d.downloadsCount  = 0,
+          d.ratingCount     = 0,
+          d.ratingSum       = 0,
+          d.ratingAvg       = 0.0,
+          d.createdAt       = $createdAt
+        `,
+        neoParams
+      )
+    );
+
+    // 5) Duplicate assets in Cassandra to match your table definition
+    const srcUUID = cassTypes.Uuid.fromString(
+      objectIdToUuid(src._id.toString())
+    );
+    const dstUUID = cassTypes.Uuid.fromString(
+      objectIdToUuid(dst._id.toString())
+    );
+
+    // Only the columns that actually exist in `files`
+    const qSelect =
+      "SELECT id, kind, name, creation_date, amount_of_bytes, blob_data FROM files WHERE dataset_id = ?";
+
+    const qInsert =
+      "INSERT INTO files (dataset_id, id, kind, name, creation_date, amount_of_bytes, blob_data) " +
+      "VALUES (?, ?, ?, ?, ?, ?, ?)";
+
+    const rows = await cassandraClient.execute(qSelect, [srcUUID], {
+      prepare: true,
+    });
+
+    for (const r of rows.rows) {
+      const newAssetId = cassTypes.TimeUuid.now(); // new TIMEUUID for the clone
+      const createdAt = r.creation_date || new Date(); // keep original if present
+
+      await cassandraClient.execute(
+        qInsert,
+        [
+          dstUUID,
+          newAssetId,
+          r.kind,
+          r.name,
+          createdAt,
+          r.amount_of_bytes,
+          r.blob_data, // Buffer/BLOB as stored
+        ],
+        { prepare: true }
+      );
+    }
+
+    // 6) Done
+    return res.json({
+      _id: dst._id,
+      id: dst._id,
+      datasetId: dst.datasetId || dst._id,
+      name: dst.name,
+      description: dst.description,
+      datasetAvatarUrl: dst.datasetAvatarUrl || null,
+      status: dst.status,
+      owner: dst.owner,
+      createdAt: dst.createdAt,
+      updatedAt: dst.updatedAt,
+    });
+  } catch (err) {
+    if (newDsSaved) {
+      try {
+        await Dataset.deleteOne({ _id: newDsSaved._id });
+      } catch {}
+      try {
+        await sessionNeo.executeWrite((tx) =>
+          tx.run("MATCH (d:Dataset {ID:$id}) DETACH DELETE d", {
+            id: String(newDsSaved._id),
+          })
+        );
+      } catch {}
+    }
+    return res.status(500).json({ error: err.message });
+  } finally {
+    await sessionNeo.close();
+  }
+});
 
 // publicar un comentario
 app.post("/posts/:postId/comments", async (req, res) => {

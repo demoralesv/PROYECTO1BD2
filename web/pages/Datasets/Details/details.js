@@ -167,6 +167,7 @@ const datasetView = () => {
         <div class="footer-actions" data-owneronly>
             <button id="btnEdit" class="btn">Edit</button>
             <button id="btnSubmit" class="btn primary">Submit for review</button>
+            <button id="btnClone" class="btn">Clone</button>
             <button id="btnDelete" class="btn danger">Delete</button>
         </div>
 
@@ -765,11 +766,37 @@ const datasetView = () => {
         const btnDownload = $("btnDownload");
         const btnEdit     = $("btnEdit");
         const btnSubmit   = $("btnSubmit");
+        const btnClone    = $("btnClone");
         const btnDelete   = $("btnDelete");
+
+        // Botón clonar
+        if (btnClone) {
+        btnClone.addEventListener("click", async function () {
+            if (!confirm("Clone this dataset? This creates a new dataset with the same files and videos. Status becomes Pending. Comments, votes and downloads do NOT transfer.")) {
+            return;
+            }
+            try {
+            btnClone.disabled = true;
+            setText("status", "Cloning…");
+
+            const res = await apiPost("/api/datasets/" + encodeURIComponent(datasetMongoId) + "/clone", {});
+            const newId = (res && res.datasetId) || (res && res.id) || (res && res._id);
+            if (!newId) throw new Error("Clone succeeded but no new id returned.");
+
+            try { sessionStorage.setItem("flash", "Dataset cloned ✔"); } catch (_) {}
+
+            window.location.href = "/profile";
+            } catch (e) {
+            setText("status", (e && e.message) || "Failed to clone");
+            } finally {
+            btnClone.disabled = false;
+            }
+        });
+        }
+
         // Descargar un .zip
         btnDownload?.addEventListener("click", async function(){
             try {
-                // 1) bump counter & relation first
                 const t = await apiPost(
                 "/api/datasets/" + encodeURIComponent(datasetMongoId) + "/track-download",
                 { source: "zip" }
@@ -778,7 +805,7 @@ const datasetView = () => {
                 updateDownloadsDisplay(t.downloadsCount);
                 }
 
-                // 2) then start the actual download
+                // Descarga
                 await downloadBlob(
                 "/api/datasets/" + encodeURIComponent(datasetMongoId) + "/download",
                 (ds.name || "dataset") + ".zip"
@@ -817,6 +844,7 @@ const datasetView = () => {
         .then(() => { setText("status", "Deleted ✔"); window.location.href = "/profile"; })
         .catch(e => setText("status", e.message));
         });
+
 
         // Comentarios
         var postId = ds.datasetId || ds._id;
