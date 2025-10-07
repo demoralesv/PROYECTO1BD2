@@ -49,7 +49,7 @@ const createDataset = () => {
         }
         .pill{ font-size:.8rem; padding:2px 8px; border-radius:999px; border:1px solid var(--line); color:var(--muted) }
 
-        /* partes para escoger archivos y videos */
+        /* Partes para escoger archivos y videos */
         .file-area, .video-area{
             height: 190px;
             overflow: auto;
@@ -103,6 +103,7 @@ const createDataset = () => {
         }
         .owner-label{ color:#c9d6e5; font-size:.9rem; opacity:.9 }
         .sidebar{ align-self: start; }
+        .status.error{ color:#ff6b6b }
       </style>
     </head>
     <body>
@@ -121,7 +122,6 @@ const createDataset = () => {
         <aside class="card sidebar grid">
             <div class="owner">
                 <div class="owner-label">Owner</div>
-                <input type="hidden" id="datasetId" />
 
                 <div class="owner-header">
                   <img id="ownerAvatar" class="owner-avatar" alt="Owner avatar" />
@@ -160,21 +160,31 @@ const createDataset = () => {
           </div>
 
           <div class="two">
+            <!-- Archivos -->
             <div class="field">
-                <label>Files (multiple)</label>
-                <input id="fileInput" type="file" multiple />
-                <div class="file-area">
-                    <div id="fileChips" class="chip-list"></div>
-                </div>
-                </div>
+              <label>Files (multiple) <span class="muted">(at least one)</span></label>
+              <input id="fileInput" type="file" multiple />
+              <div class="row muted" style="font-size:.9rem">
+                <div>Files selected: <span id="fileCount">0</span></div>
+                <div>Total: <span id="fileTotal">0 B</span></div>
+              </div>
+              <div class="file-area">
+                <div id="fileChips" class="chip-list"></div>
+              </div>
+            </div>
 
-                <div class="field">
-                <label>Videos (multiple)</label>
-                <input id="videoInput" type="file" accept="video/*" multiple />
-                <div class="video-area">
-                    <div id="videoGrid" class="video-grid"></div>
-                </div>
-                </div>
+            <!-- Videos -->
+            <div class="field">
+              <label>Videos (multiple) <span class="muted">(optional)</span></label>
+              <input id="videoInput" type="file" accept="video/*" multiple />
+              <div class="row muted" style="font-size:.9rem">
+                <div>Videos selected: <span id="videoCount">0</span></div>
+                <div>Total: <span id="videoTotal">0 B</span></div>
+              </div>
+              <div class="video-area">
+                <div id="videoGrid" class="video-grid"></div>
+              </div>
+            </div>
           </div>
 
           <div class="row" style="justify-content:flex-end; gap:10px">
@@ -187,6 +197,7 @@ const createDataset = () => {
       <script>
         (function(){
           var API = "http://localhost:3000";
+          const MAX_TOTAL_BYTES = 15 * 1024 * 1024;
 
           function authHeaders(){
             var t = localStorage.getItem("token");
@@ -213,7 +224,6 @@ const createDataset = () => {
           }
 
           function seedDsAvatar(){
-            // Use dataset name (or a generic label) for initials
             var name = ( $("dsName").value || "" ).trim() || "Dataset";
             return "https://api.dicebear.com/8.x/initials/svg?seed=" + encodeURIComponent(name);
           }
@@ -224,6 +234,41 @@ const createDataset = () => {
             const img = $("dsAvatarPreview");
             if (!img) return;
             img.src = src;
+          }
+
+          function formatBytes(n){
+            if (!n) return "0 B";
+            const u = ["B","KB","MB","GB","TB"];
+            const i = Math.floor(Math.log(n)/Math.log(1024));
+            return (n/Math.pow(1024, i)).toFixed(i ? 1 : 0) + " " + u[i];
+          }
+          function setStatus(msg, isErr){
+            const s = $("status");
+            s.textContent = msg;
+            s.className = "status muted" + (isErr ? " error" : "");
+          }
+          
+          const VIDEO_EXT = new Set([".mp4",".mov",".m4v",".mkv",".webm",".avi",".wmv",".flv",".mpeg",".mpg",".3gp",".ts"]);
+          function isVideoByExt(name){
+            const dot = name.lastIndexOf(".");
+            if (dot < 0) return false;
+            return VIDEO_EXT.has(name.slice(dot).toLowerCase());
+          }
+          function isVideoByMime(f){
+            return (f.type || "").startsWith("video/");
+          }
+
+          // Cantidad de archivos y videos inicial
+          var files = [];
+          var videos = [];
+
+          function updateTotals(){
+            const fileBytes = files.reduce((a,f)=>a+(f.size||0),0);
+            const vidBytes  = videos.reduce((a,f)=>a+(f.size||0),0);
+            setText("fileCount", String(files.length));
+            setText("videoCount", String(videos.length));
+            setText("fileTotal", formatBytes(fileBytes));
+            setText("videoTotal", formatBytes(vidBytes));
           }
 
           // Info del usuario
@@ -237,19 +282,12 @@ const createDataset = () => {
             })
           }
 
-          // ID del dataset
-          function genId(){
-            return "ds_" + Math.random().toString(36).slice(2,10);
-          }
-
           function dedupeByNameSize(list){
             const map = new Map(list.map(f => [f.name + ":" + f.size, f]));
             return Array.from(map.values());
           }
-
+          
           // Interfaz de los archivos y videos
-          var files = [];
-          var videos = [];
           function extOf(f){
             const n = f.name || "";
             const dot = n.lastIndexOf(".");
@@ -257,22 +295,40 @@ const createDataset = () => {
             return (f.type?.split("/").pop() || "FILE").toUpperCase();
           }
 
-            function renderFileChips(){
+          function totalSelectedBytes() {
+            return files.reduce((a,f)=>a+(f.size||0),0) +
+                  videos.reduce((a,f)=>a+(f.size||0),0);
+          }
+
+          function guardTotalOrWarn() {
+            const total = totalSelectedBytes();
+            if (total > MAX_TOTAL_BYTES) {
+              setStatus(
+                "Total selected exceeds 15 MB (" + formatBytes(total) + "). Please remove some files/videos.",
+                true
+              );
+              return false;
+            }
+            return true;
+          }
+
+          function renderFileChips(){
             var box = $("fileChips"); box.innerHTML = "";
             if(files.length === 0){ box.innerHTML = '<span class="muted">No files selected</span>'; return }
             files.forEach(function(f, i){
-                var chip = document.createElement("div");
-                chip.className = "chip-item";
-                chip.innerHTML =
+              var chip = document.createElement("div");
+              chip.className = "chip-item";
+              chip.innerHTML =
                 '<span class="pill">'+ extOf(f) +'</span>' +
                 '<span class="name" title="'+ f.name +'">'+ f.name +'</span>' +
                 '<button title="remove">×</button>';
-                chip.querySelector("button").addEventListener("click", function(){
-                files.splice(i,1); renderFileChips();
-                });
-                box.appendChild(chip);
+              chip.querySelector("button").addEventListener("click", function(){
+                files.splice(i,1); renderFileChips(); updateTotals();
+              });
+              box.appendChild(chip);
             });
-            }
+          }
+
           function renderVideoGrid(){
             var box = $("videoGrid"); box.innerHTML = "";
             if(videos.length === 0){ box.innerHTML = '<span class="muted">No videos selected</span>'; return }
@@ -280,26 +336,40 @@ const createDataset = () => {
               var wrap = document.createElement("div");
               wrap.className = "video-wrap";
               var url = URL.createObjectURL(f);
-              wrap.innerHTML = '<video src="'+url+'" controls style="width:100%; height:160px; object-fit:cover"></video><button title="remove" data-i="'+i+'">×</button>';
+              wrap.innerHTML =
+                '<video src="'+url+'" controls style="width:100%; height:160px; object-fit:cover"></video>' +
+                '<button title="remove" data-i="'+i+'">×</button>';
               wrap.querySelector("button").addEventListener("click", function(){
                 URL.revokeObjectURL(url);
-                videos.splice(i,1); renderVideoGrid()
+                videos.splice(i,1); renderVideoGrid(); updateTotals();
               });
               box.appendChild(wrap);
             })
           }
 
           $("fileInput").addEventListener("change", function(e){
-            const selected = Array.from(e.target.files || []);
+            let selected = Array.from(e.target.files || []);
+            selected = selected.filter(f => !isVideoByMime(f) && !isVideoByExt(f.name));
             files = dedupeByNameSize(files.concat(selected));
-            renderFileChips();
-            e.target.value = ""; // allow re-choosing the same file later
+            renderFileChips(); updateTotals();
+
+            if (!guardTotalOrWarn()) {
+              files = files.slice(0, files.length - selected.length);
+              renderFileChips(); updateTotals();
+            }
+            e.target.value = "";
           });
 
           $("videoInput").addEventListener("change", function(e){
-            const selected = Array.from(e.target.files || []);
+            let selected = Array.from(e.target.files || []);
+            selected = selected.filter(f => isVideoByMime(f) || isVideoByExt(f.name));
             videos = dedupeByNameSize(videos.concat(selected));
-            renderVideoGrid();
+            renderVideoGrid(); updateTotals();
+
+            if (!guardTotalOrWarn()) {
+              videos = videos.slice(0, videos.length - selected.length);
+              renderVideoGrid(); updateTotals();
+            }
             e.target.value = "";
           });
 
@@ -311,31 +381,53 @@ const createDataset = () => {
             this.src = seedDsAvatar();
           });
           
+          function postJSON(path, body){
+            return fetch(API + path, {
+              method: "POST",
+              headers: Object.assign({ "Content-Type":"application/json" }, authHeaders()),
+              body: JSON.stringify(body)
+            }).then(r => r.ok ? r.json() : r.json().then(d=>{ throw new Error(d.error||r.statusText) }));
+          }
+          function postForm(path, form){
+            return fetch(API + path, {
+              method: "POST",
+              headers: authHeaders(),
+              body: form
+            }).then(r => r.ok ? r.json() : r.json().then(d=>{ throw new Error(d.error||r.statusText) }));
+          }
+  
           // Guardar
           function setStatus(msg){ setText("status", msg) }
-          $("btnSave").addEventListener("click", function(){
-            var name = $("dsName").value.trim();
-            var desc = $("dsDesc").value.trim();
-            var urlInput = ($("dsAvatar").value || "").trim();
-            var avatar = validHttpUrl(urlInput) ? urlInput : seedDsAvatar();
+          $("btnSave").addEventListener("click", async function(){
+            if (!guardTotalOrWarn()) return;
+            try{
+              setStatus("");
+              const name = $("dsName").value.trim();
+              const desc = $("dsDesc").value.trim();
+              const urlInput = ($("dsAvatar").value || "").trim();
+              const avatar = validHttpUrl(urlInput) ? urlInput : seedDsAvatar();
 
-            if(!name || !desc){ setStatus("Please fill required fields."); return }
+              // Se ocupa al menos un archivo
+              if (!name || !desc){ setStatus("Please fill required fields.", true); return }
+              if (files.length === 0){ setStatus("Please add at least one file (not video).", true); return }
 
-            var payload = {
-              datasetId: $("datasetId").value || genId(),
-              name: name,
-              description: desc,
-              datasetAvatarUrl: avatar
-              // TODO: Falta poder guardar los archivos y videos
-            };
+              setStatus("Saving dataset…");
 
-            setStatus("Saving…");
-            apiPost("/datasets", payload)
-              .then(function(saved){
-                setStatus("Saved ✔");
-                window.location.href = "/profile";
-              })
-              .catch(function(e){ setStatus(e.message) });
+              // Se crea el dataset en Mongo
+              const saved = await postJSON("/datasets", { name, description: desc, datasetAvatarUrl: avatar });
+
+              // Se guardan los archivos y videos en Cassandra
+              setStatus("Uploading assets…");
+              const form = new FormData();
+              files.forEach(f => form.append("files", f, f.name));
+              videos.forEach(v => form.append("videos", v, v.name));
+              await postForm("/datasets/" + encodeURIComponent(saved._id) + "/assets", form);
+
+              setStatus("Saved ✔");
+              window.location.href = "/profile";
+            }catch(e){
+              setStatus(e.message || String(e), true);
+            }
           });
 
           $("btnCancel").addEventListener("click", function(){ window.location.href = "/profile" });
@@ -343,7 +435,6 @@ const createDataset = () => {
 
           // Correr todo
           ensureToken();
-          $("datasetId").value = genId();
           loadOwner().catch(function(e){ setStatus(e.message) });
           refreshDsAvatarPreview();
           renderFileChips();

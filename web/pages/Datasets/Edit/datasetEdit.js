@@ -45,11 +45,12 @@ const datasetEdit = () => {
       .box{ border:1px solid var(--line); border-radius:12px; padding:12px; background:#0f1217 }
       .file-row{ display:flex; align-items:center; justify-content:space-between; padding:8px; border:1px solid var(--line); border-radius:10px; background:#0f1217 }
       .video-grid{ display:grid; grid-template-columns:repeat(auto-fill,minmax(180px,1fr)); gap:10px }
-      .video-card{ border:1px solid var(--line); border-radius:10px; overflow:hidden; background:#0f1217; display:grid; gap:8px; padding:8px }
-      .video-card .thumb{ width:100%; height:120px; background:#12161c; border-radius:8px; display:grid; place-items:center; font-size:.9rem; color:var(--muted) }
+      .video-card{ position:relative; border:1px solid var(--line); border-radius:10px; overflow:hidden; background:#0f1217 }
+      .video-card video{ width:100%; height:160px; object-fit:cover }
+      .video-card .bar{ display:flex; justify-content:space-between; align-items:center; padding:6px 8px }
 
       /* Escoger archivos y videos */
-      .file-area, .video-area{ height:190px; overflow:auto; border:1px solid var(--line); border-radius:10px; padding:10px; background:#0f1217 }
+      .file-area, .video-area{ max-height:190px; overflow:auto; border:1px solid var(--line); border-radius:10px; padding:10px; background:#0f1217 }
       .chip-list{ display:flex; flex-wrap:wrap; gap:8px }
       .chip-item{ display:flex; align-items:center; gap:8px; padding:6px 10px; border:1px solid var(--line); border-radius:10px; background:#0f1217; max-width:100% }
       .chip-item .name{ display:inline-block; max-width:min(40vw,280px); white-space:nowrap; overflow:hidden; text-overflow:ellipsis }
@@ -58,6 +59,8 @@ const datasetEdit = () => {
       .footer-actions{ display:flex; gap:10px; justify-content:flex-end; margin-top:10px }
       .help{ font-size:.9rem; color:var(--muted) }
       .status{ min-height:20px; color:var(--muted) }
+      .counter{ display:flex; gap:10px; font-size:.9rem; color:var(--muted) }
+      .counter b{ color:var(--text) }
     </style>
   </head>
   <body>
@@ -69,7 +72,7 @@ const datasetEdit = () => {
     </header>
 
     <main class="page">
-      <!-- Panel izquierdo -->
+      <!-- Parte izquierda -->
       <aside class="card sidebar">
         <div class="title-row">
           <img id="dsAvatar" class="ds-avatar" alt="dataset avatar" />
@@ -86,7 +89,7 @@ const datasetEdit = () => {
         </div>
       </aside>
 
-      <!-- Editor del dataset -->
+      <!-- Parte derecha -->
       <section class="card">
         <div class="hero">
           <div class="two-col">
@@ -104,7 +107,12 @@ const datasetEdit = () => {
         <div class="panel">
           <h3 class="section-title">Files</h3>
           <div class="box" style="display:grid; gap:10px">
-            <!-- existing uploaded files (removable) -->
+            <div class="counter">
+              <span>Existing: <b id="filesExistingCount">0</b></span>
+              <span>Total size: <b id="filesExistingBytes">0 B</b></span>
+              <span>New (staged): <b id="filesStagedCount">0</b></span>
+              <span>New size: <b id="filesStagedBytes">0 B</b></span>
+            </div>
             <div id="filesList" style="display:grid; gap:8px">
               <span class="muted">No files yet</span>
             </div>
@@ -113,20 +121,26 @@ const datasetEdit = () => {
               <input id="fileInput" type="file" multiple />
             </div>
             <div class="file-area">
-              <div id="fileChips" class="chip-list"></div>
+              <div id="fileChips" class="chip-list"><span class="muted">No files selected</span></div>
             </div>
             <div id="fileStatus" class="status"></div>
           </div>
 
           <h3 class="section-title" style="margin-top:18px">Videos</h3>
           <div class="box" style="display:grid; gap:10px">
+            <div class="counter">
+              <span>Existing: <b id="videosExistingCount">0</b></span>
+              <span>Total size: <b id="videosExistingBytes">0 B</b></span>
+              <span>New (staged): <b id="videosStagedCount">0</b></span>
+              <span>New size: <b id="videosStagedBytes">0 B</b></span>
+            </div>
             <div id="videoGridExisting" class="video-grid"><span class="muted">No videos yet</span></div>
             <div class="row">
               <label class="muted">Add more videos (multiple)</label>
               <input id="videoInput" type="file" accept="video/*" multiple />
             </div>
             <div class="video-area">
-              <div id="videoGridNew" class="video-grid"></div>
+              <div id="videoGridNew" class="video-grid"><span class="muted">No videos selected</span></div>
             </div>
             <div id="videoStatus" class="status"></div>
           </div>
@@ -143,12 +157,50 @@ const datasetEdit = () => {
     <script>
     (function(){
       var API = "http://localhost:3000";
+      const MAX_TOTAL_BYTES = 15 * 1024 * 1024;
 
-      // Ayudan a obtener info del usuario y dataset
       function authHeaders(){
         var t = localStorage.getItem("token");
         return t ? { "Authorization": "Bearer " + t } : {};
       }
+      function $(id){ return document.getElementById(id); }
+      function setText(id,v){ var el=$(id); if(el) el.textContent=v; }
+      function ensureToken(){ if(!localStorage.getItem("token")) window.location.replace("/"); }
+      function fmtDate(d){ try{ return new Date(d).toLocaleString(); } catch(_){ return d||"—"; } }
+      function idFromPath(){ var p=location.pathname.split("/"); return p[2]||""; }
+      function initialsAvatar(seed){ return "https://api.dicebear.com/8.x/initials/svg?seed=" + encodeURIComponent(seed||"Dataset"); }
+      function humanSize(n){ if(!n) return "0 B"; const u=["B","KB","MB","GB","TB"]; const i=Math.floor(Math.log(n)/Math.log(1024)); return (n/Math.pow(1024,i)).toFixed(i?1:0)+" "+u[i]; }
+      function extOfName(name){ const dot=name.lastIndexOf("."); return dot>0? name.slice(dot+1).toUpperCase() : "FILE"; }
+
+        const VIDEO_EXT = new Set([
+          ".mp4",".mov",".m4v",".mkv",".webm",".avi",".wmv",".flv",".mpeg",".mpg",".3gp",".ts"
+        ]);
+        function isVideoByExt(name){
+          const dot = (name || "").lastIndexOf(".");
+          if (dot < 0) return false;
+          return VIDEO_EXT.has(name.slice(dot).toLowerCase());
+        }
+        function isVideoByMime(file){
+          return (file.type || "").startsWith("video/");
+        }
+
+      const endpoints = {
+        // Datos del dataset
+        getDataset: id => "/api/datasets/" + encodeURIComponent(id),
+        putMeta:    id => "/api/datasets/" + encodeURIComponent(id),
+
+        // Datos de los archivos y videos
+        getAssets:     id => "/api/datasets/" + encodeURIComponent(id) + "/assets",
+        uploadAssets:  id => "/datasets/" + encodeURIComponent(id) + "/assets",
+
+        // Para borrar los archivos y videos
+        delAssetApi:   (id, assetId) => "/api/datasets/" + encodeURIComponent(id) + "/assets/" + encodeURIComponent(assetId),
+        delAssetNoApi: (id, assetId) => "/datasets/"  + encodeURIComponent(id) + "/assets/" + encodeURIComponent(assetId),
+
+        delFileApi:    (id, fileId)  => "/api/datasets/" + encodeURIComponent(id) + "/files/"  + encodeURIComponent(fileId),
+        delVideoApi:   (id, vidId)   => "/api/datasets/" + encodeURIComponent(id) + "/videos/" + encodeURIComponent(vidId),
+      };
+
       function apiGet(path){
         return fetch(API + path, { headers: Object.assign({ "Content-Type":"application/json" }, authHeaders()) })
           .then(r=>r.ok?r.json():r.json().then(d=>{throw new Error(d.error||r.statusText)}));
@@ -159,127 +211,245 @@ const datasetEdit = () => {
       }
       function apiUpload(path, formData){
         return fetch(API + path, { method:"POST", headers: authHeaders(), body: formData })
-          .then(r=> r.ok ? r.json() : r.text().then(t=>{throw new Error(t||r.statusText)}));
+          .then(async r=>{
+            if (r.ok) return r.json();
+            const t = await r.text().catch(()=>r.statusText);
+            throw new Error(t||r.statusText);
+          });
       }
       function apiDelete(path){
         return fetch(API + path, { method:"DELETE", headers: authHeaders() })
-          .then(r=> r.ok ? (r.status===204?{}:r.json()) : r.json().then(d=>{throw new Error(d.error||r.statusText)}));
+          .then(async r=>{
+            if (r.status===204) return {};
+            if (r.ok) return r.json();
+            const t = await r.text().catch(()=>r.statusText);
+            throw new Error(t||r.statusText);
+          });
       }
 
-      function $(id){ return document.getElementById(id); }
-      function setText(id,v){ var el=$(id); if(el) el.textContent=v; }
-      function ensureToken(){ if(!localStorage.getItem("token")) window.location.replace("/"); }
-      function fmtDate(d){ try{ return new Date(d).toLocaleString(); } catch(_){ return d||"—"; } }
-      function idFromPath(){ var p=location.pathname.split("/"); return p[2]||""; }
-      function fileId(f){ return f._id || f.id || f.fileId || f.name; }
-      function videoId(v){ return v._id || v.id || v.videoId || v.url; }
-      function humanSize(n){
-        if (n<1024) return n+" B";
-        if (n<1024*1024) return (n/1024).toFixed(1)+" KB";
-        if (n<1024*1024*1024) return (n/1024/1024).toFixed(1)+" MB";
-        return (n/1024/1024/1024).toFixed(1)+" GB";
+      // Estado del dataset
+      let DATASET_ID = "";
+      let DS = null;
+      let existing = { files: [], videos: [] };
+      let staged  = { files: [], videos: [] };
+
+      // Contadores
+      function refreshCounters(){
+        const fBytesExisting = existing.files.reduce((a,f)=>a+(f.bytes||0),0);
+        const vBytesExisting = existing.videos.reduce((a,f)=>a+(f.bytes||0),0);
+        const fBytesStaged   = staged.files.reduce((a,f)=>a+(f.size||0),0);
+        const vBytesStaged   = staged.videos.reduce((a,f)=>a+(f.size||0),0);
+
+        setText("filesExistingCount", String(existing.files.length));
+        setText("filesExistingBytes", humanSize(fBytesExisting));
+        setText("filesStagedCount",   String(staged.files.length));
+        setText("filesStagedBytes",   humanSize(fBytesStaged));
+
+        setText("videosExistingCount", String(existing.videos.length));
+        setText("videosExistingBytes", humanSize(vBytesExisting));
+        setText("videosStagedCount",   String(staged.videos.length));
+        setText("videosStagedBytes",   humanSize(vBytesStaged));
       }
-      function extOfName(name){ const dot=name.lastIndexOf("."); return dot>0? name.slice(dot+1).toUpperCase() : "FILE"; }
-      function initialsAvatar(seed){ return "https://api.dicebear.com/8.x/initials/svg?seed=" + encodeURIComponent(seed||"Dataset"); }
+      function guardNewUploadsTotalOrWarn(kind){
+        const sum = [...staged.files, ...staged.videos].reduce((a,f)=>a+(f.size||0),0);
+        if (sum > MAX_TOTAL_BYTES){
+          const msg = "Total newly selected exceeds 15 MB ("+humanSize(sum)+"). Please remove some "+(kind||"items")+".";
+          if (kind==="files") setText("fileStatus", msg); else setText("videoStatus", msg);
+          return false;
+        }
+        if (kind==="files") setText("fileStatus",""); else setText("videoStatus","");
+        return true;
+      }
 
-      // Estado de las casillas
-      var DS = null;
-      var DATASET_ID = "";
-      var uploading = { files:false, videos:false };
-
-      // Mostrar en la página
+      // Mostrar objetos en la pantalla
       function renderBasics(ds){
-        const effective = (ds.datasetAvatarUrl && ds.datasetAvatarUrl.trim()) || "";
-        $("dsAvatar").src = effective || initialsAvatar(ds.name || "Dataset");
+        const avatarEff = (ds.datasetAvatarUrl||"").trim();
+        $("dsAvatar").src = avatarEff || initialsAvatar(ds.name||"Dataset");
         $("dsAvatar").onerror = function(){ this.onerror=null; this.src = initialsAvatar($("nameInput").value || ds.name || "Dataset"); };
 
         $("dsNamePreview").textContent = ds.name || "—";
         setText("dsDates", "Created " + fmtDate(ds.createdAt) + " • Last update " + fmtDate(ds.updatedAt));
 
-        $("nameInput").value = ds.name || "";
-        $("descInput").value = ds.description || "";
-        $("avatarInput").value = effective;
+        $("nameInput").value   = ds.name || "";
+        $("descInput").value   = ds.description || "";
+        $("avatarInput").value = avatarEff;
       }
 
+      // Interfaz para archivos y videos que ya existen
       function fileLabel(f){
         const name = f.name || "unnamed";
-        const t = f.type || extOfName(name);
-        const size = f.size!=null ? (" • " + humanSize(f.size)) : "";
-        return '<span class="muted" style="font-size:.85rem">'+t+'</span> <span class="name" title="'+name+'">'+name+'</span><span class="muted">'+size+'</span>';
+        const t = (f.type || "").toUpperCase() || extOfName(name);
+        return '<span class="muted" style="font-size:.85rem">'+t+'</span> '+
+               '<span class="name" title="'+name+'">'+name+'</span> '+
+               '<span class="muted">· '+humanSize(f.bytes||0)+'</span>';
       }
-
-      function renderFiles(ds){
+      function renderExistingFiles(){
         const list = $("filesList");
         list.innerHTML = "";
-        if (!ds.files || !ds.files.length){
+        if (!existing.files.length){
           list.innerHTML = '<span class="muted">No files yet</span>';
-          return;
-        }
-        ds.files.forEach(f=>{
-          const row = document.createElement("div");
-          row.className = "file-row";
-          row.innerHTML =
-            '<div>'+fileLabel(f)+'</div>' +
-            '<div style="display:flex; gap:8px">' +
-              (f.url ? '<a class="btn sm" href="'+f.url+'" target="_blank">Open</a>' : '') +
-              '<button class="btn sm danger" data-del="'+fileId(f)+'">Remove</button>' +
-            '</div>';
-          row.querySelector("[data-del]").addEventListener("click", ()=>{
-            setText("fileStatus","Removing…");
-            apiDelete('/api/datasets/'+encodeURIComponent(DATASET_ID)+'/files/'+encodeURIComponent(fileId(f)))
-              .then(resp=>{
-                if (resp.dataset) DS = resp.dataset;
-                else if (resp.files) DS.files = resp.files;
-                else return apiGet('/api/datasets/'+encodeURIComponent(DATASET_ID)).then(x=>{ DS=x; });
-              })
-              .then(()=>{ renderFiles(DS); setText("fileStatus","Removed ✔"); setTimeout(()=>setText("fileStatus",""),1200); })
-              .catch(e=> setText("fileStatus", e.message));
+        } else {
+          existing.files.forEach(f=>{
+            const row = document.createElement("div");
+            row.className = "file-row";
+            row.innerHTML =
+              '<div>'+fileLabel(f)+'</div>'+
+              '<div style="display:flex; gap:8px">'+
+                '<button class="btn sm danger" data-del>× Remove</button>'+
+              '</div>';
+            row.querySelector("[data-del]").addEventListener("click", ()=>deleteAsset(f, "file"));
+            list.appendChild(row);
           });
-          list.appendChild(row);
-        });
+        }
+        refreshCounters();
       }
-
-      function renderVideosExisting(ds){
+      function renderExistingVideos(){
         const grid = $("videoGridExisting");
         grid.innerHTML = "";
-        if (!ds.videos || !ds.videos.length){
+        if (!existing.videos.length){
           grid.innerHTML = '<span class="muted">No videos yet</span>';
-          return;
-        }
-        ds.videos.forEach(v=>{
-          const card = document.createElement("div");
-          card.className = "video-card";
-          const label = v.title || v.name || v.url || "Video";
-          const thumbHtml = v.thumbUrl
-            ? '<img class="thumb" src="'+v.thumbUrl+'" alt="thumb" />'
-            : '<div class="thumb">No preview</div>';
-          card.innerHTML =
-            thumbHtml +
-            '<div class="muted" title="'+label+'" style="white-space:nowrap; overflow:hidden; text-overflow:ellipsis">'+label+'</div>' +
-            '<div style="display:flex; gap:8px">' +
-              (v.url ? '<a class="btn sm" href="'+v.url+'" target="_blank">Open</a>' : '') +
-              '<button class="btn sm danger" data-vdel="'+videoId(v)+'">Remove</button>' +
-            '</div>';
-          card.querySelector("[data-vdel]").addEventListener("click", ()=>{
-            setText("videoStatus","Removing…");
-            apiDelete('/api/datasets/'+encodeURIComponent(DATASET_ID)+'/videos/'+encodeURIComponent(videoId(v)))
-              .then(resp=>{
-                if (resp.dataset) DS = resp.dataset;
-                else if (resp.videos) DS.videos = resp.videos;
-                else return apiGet('/api/datasets/'+encodeURIComponent(DATASET_ID)).then(x=>{ DS=x; });
-              })
-              .then(()=>{ renderVideosExisting(DS); setText("videoStatus","Removed ✔"); setTimeout(()=>setText("videoStatus",""),1200); })
-              .catch(e=> setText("videoStatus", e.message));
+        } else {
+          existing.videos.forEach(v=>{
+            const card = document.createElement("div");
+            card.className = "video-card";
+            const video = document.createElement("video");
+            video.controls = true;
+            card.appendChild(video);
+            const bar = document.createElement("div");
+            bar.className = "bar";
+            bar.innerHTML = '<span class="muted" title="'+(v.name||"Video")+'" style="white-space:nowrap; overflow:hidden; text-overflow:ellipsis; max-width:60%">'+(v.name||"Video")+'</span><button class="btn sm danger">× Remove</button>';
+            card.appendChild(bar);
+            bar.querySelector("button").addEventListener("click", ()=>deleteAsset(v, "video"));
+            grid.appendChild(card);
+
+            const assetPath = endpoints.getAssets(DATASET_ID)+"/"+encodeURIComponent(v.assetId);
+            fetch(API+assetPath, { headers: authHeaders() })
+              .then(r=> r.ok ? r.blob() : Promise.reject(new Error("Failed to load video")))
+              .then(b=>{ video.src = URL.createObjectURL(b); });
           });
-          grid.appendChild(card);
-        });
+        }
+        refreshCounters();
       }
 
-      // Eventos en la página
+      // Borrar archivos y videos
+      function deleteAsset(asset, kind){
+        const assetId =
+          asset.assetId || asset.fileId || asset.videoId || asset._id || asset.id || asset.name;
+        const statusEl = (kind === "video") ? "videoStatus" : "fileStatus";
+        if (!assetId) { setText(statusEl, "Missing asset id"); return; }
+
+        setText(statusEl, "Removing…");
+
+        const tries = [
+          endpoints.delAssetApi(DATASET_ID, assetId),
+          endpoints.delAssetNoApi(DATASET_ID, assetId),
+          kind === "video"
+            ? endpoints.delVideoApi(DATASET_ID, assetId)
+            : endpoints.delFileApi(DATASET_ID, assetId)
+        ];
+
+        (function attempt(i){
+          if (i >= tries.length) {
+            setText(statusEl, "Failed to remove (no matching endpoint)"); return;
+          }
+          apiDelete(tries[i])
+            .then(() => Promise.all([reloadAssets(), apiGet(endpoints.getDataset(DATASET_ID))]))
+            .then(([_, dsFresh]) => {
+              DS = Object.assign({}, DS, dsFresh);
+              setText("dsDates", "Created " + fmtDate(DS.createdAt) + " • Last update " + fmtDate(DS.updatedAt));
+              setText(statusEl, "Removed ✔");
+              setTimeout(() => setText(statusEl, ""), 1200);
+            })
+            .catch(() => attempt(i+1));
+        })(0);
+      }
+
+      function renderStagedFiles(){
+        const box = $("fileChips"); 
+        box.innerHTML = "";
+        if (!staged.files.length){
+          box.innerHTML = '<span class="muted">No files selected</span>';
+          refreshCounters();
+          return;
+        }
+        staged.files.forEach((f,i)=>{
+          const chip = document.createElement("div");
+          chip.className = "chip-item";
+          chip.innerHTML =
+            '<span class="pill">'+extOfName(f.name||"")+'</span>' +
+            '<span class="name" title="'+f.name+'">'+f.name+'</span>' +
+            '<button title="remove">×</button>';
+          chip.querySelector("button").addEventListener("click", ()=>{
+            staged.files.splice(i,1);
+            renderStagedFiles();
+            refreshCounters();
+          });
+          box.appendChild(chip);
+        });
+        refreshCounters();
+      }
+
+      function renderStagedVideos(){
+        const box = $("videoGridNew"); box.innerHTML = "";
+        if (!staged.videos.length){ box.innerHTML = '<span class="muted">No videos selected</span>'; refreshCounters(); return; }
+        staged.videos.forEach((v,i)=>{
+          const card = document.createElement("div");
+          card.className = "video-card";
+          const url = URL.createObjectURL(v);
+          card.innerHTML = '<video src="'+url+'" controls></video><div class="bar"><span class="muted" style="white-space:nowrap; overflow:hidden; text-overflow:ellipsis; max-width:60%">'+(v.name||"Video")+'</span><button class="btn sm danger">×</button></div>';
+          card.querySelector("button").addEventListener("click", ()=>{
+            URL.revokeObjectURL(url);
+            staged.videos.splice(i,1); renderStagedVideos(); refreshCounters();
+          });
+          box.appendChild(card);
+        });
+        refreshCounters();
+      }
+
+      // Para cargar los archivos y videos
+      function uploadStaged(kind){
+        const list = staged[kind];
+        if (!list.length) return Promise.resolve();
+
+        const fd = new FormData();
+        if (kind === "files") list.forEach(f => fd.append("files", f, f.name));
+        else                  list.forEach(v => fd.append("videos", v, v.name));
+
+        const statusEl = (kind === "files") ? "fileStatus" : "videoStatus";
+        setText(statusEl, "Uploading " + list.length + " " + kind + "…");
+
+        return apiUpload(endpoints.uploadAssets(DATASET_ID), fd)
+          .then(() => reloadAssets())
+          .then(() => {
+            setText(statusEl, "Uploaded ✔");
+            if (kind === "files"){ staged.files.length = 0; renderStagedFiles(); }
+            else                 { staged.videos.length = 0; renderStagedVideos(); }
+            setTimeout(() => setText(statusEl, ""), 1200);
+          })
+          .catch(e => { setText(statusEl, e.message || "Upload failed"); throw e; });
+      }
+
+      // Cargar los archivos y videos
+      function reloadAssets(){
+        return apiGet(endpoints.getAssets(DATASET_ID))
+          .then(list=>{
+            existing.files  = Array.isArray(list.files)  ? list.files  : [];
+            existing.videos = Array.isArray(list.videos) ? list.videos : [];
+            renderExistingFiles();
+            renderExistingVideos();
+          })
+          .catch(()=>{
+            existing.files  = Array.isArray(DS?.files)  ? DS.files.map(x=>({ ...x, assetId: x.assetId||x.fileId||x._id||x.id||x.name })) : [];
+            existing.videos = Array.isArray(DS?.videos) ? DS.videos.map(x=>({ ...x, assetId: x.assetId||x.videoId||x._id||x.id||x.name })) : [];
+            renderExistingFiles();
+            renderExistingVideos();
+          });
+      }
+
+      // Ver lista y guardar cambios
       function wireBasics(){
         $("nameInput").addEventListener("input", e=>{
           $("dsNamePreview").textContent = e.target.value || "—";
-          // if avatar URL is empty, keep initials in sync with new name
           if (!($("avatarInput").value||"").trim()){
             $("dsAvatar").src = initialsAvatar(e.target.value || "Dataset");
           }
@@ -293,114 +463,90 @@ const datasetEdit = () => {
         });
 
         $("btnSave").addEventListener("click", ()=>{
+          // Para guardar se ocupa tener al menos un archivo
+          if ((existing.files.length + staged.files.length) === 0){
+            setText("saveStatus", "You must have at least one file (not video) before saving.");
+            return;
+          }
+
           const name = ($("nameInput").value||"").trim();
           const description = ($("descInput").value||"").trim();
           const avatarUrl = ($("avatarInput").value||"").trim();
-          const datasetAvatarUrl = avatarUrl || initialsAvatar(name || "Dataset"); // persist initials-based URL if empty
+          const datasetAvatarUrl = avatarUrl || initialsAvatar(name || "Dataset");
+
           setText("saveStatus","Saving…");
-          apiPut('/api/datasets/'+encodeURIComponent(DATASET_ID), { name, description, datasetAvatarUrl })
-            .then(resp=>{
-              setText("saveStatus","Saved ✔ (status: "+(resp.status||"pending")+")");
-              setTimeout(()=>{ window.location.href = '/datasets/'+encodeURIComponent(DATASET_ID); }, 600);
-            })
-            .catch(e=> setText("saveStatus", e.message));
+
+          // Si hay cambios, se guardan
+          const maybeUpload = () => {
+            if (!staged.files.length && !staged.videos.length) return Promise.resolve();
+            const fd = new FormData();
+            staged.files.forEach(f => fd.append("files",  f, f.name));
+            staged.videos.forEach(v => fd.append("videos", v, v.name));
+            return apiUpload(endpoints.uploadAssets(DATASET_ID), fd)
+              .then(() => { staged.files.length=0; staged.videos.length=0; renderStagedFiles(); renderStagedVideos(); return reloadAssets(); });
+          };
+
+          // Guardar los datos
+          maybeUpload()
+          .then(() => apiPut(endpoints.putMeta(DATASET_ID), { name, description, datasetAvatarUrl }))
+          .then(() => apiGet(endpoints.getDataset(DATASET_ID)))
+          .then(dsFresh => {
+            DS = { ...DS, ...dsFresh };
+            setText("dsDates", "Created " + fmtDate(DS.createdAt) + " • Last update " + fmtDate(DS.updatedAt));
+            setText("saveStatus", "Saved ✔" + (DS.status ? " (status: " + DS.status + ")" : ""));
+            setTimeout(gotoDetailReplace, 300);
+          })
+          .catch(e => setText("saveStatus", e.message || "Failed to save"));
         });
 
-        $("btnCancel").addEventListener("click", ()=>{ window.location.href = '/datasets/'+encodeURIComponent(DATASET_ID); });
-        $("backBtn").addEventListener("click",  ()=>{ window.location.href = '/datasets/'+encodeURIComponent(DATASET_ID); });
-      }
+        function gotoDetailReplace() {
+          const url = '/datasets/' + encodeURIComponent(DATASET_ID);
+          location.replace(url);
+        }
 
-      // Agregar más archivos
-      function renderFileChips(staged){
-        const box = $("fileChips"); box.innerHTML = "";
-        if (!staged.length){ box.innerHTML = '<span class="muted">No files selected</span>'; return; }
-        staged.forEach((f,i)=>{
-          const chip = document.createElement("div");
-          chip.className = "chip-item";
-          const ext = extOfName(f.name||"");
-          chip.innerHTML = '<span class="pill">'+ext+'</span><span class="name" title="'+f.name+'">'+f.name+'</span><button title="remove">×</button>';
-          chip.querySelector("button").addEventListener("click", ()=>{
-            staged.splice(i,1); renderFileChips(staged);
+        ["btnCancel","backBtn"].forEach(id=>{
+          const el = document.getElementById(id);
+          if (!el) return;
+          el.addEventListener('click', (e)=>{
+            e.preventDefault();
+            gotoDetailReplace();
           });
-          box.appendChild(chip);
         });
       }
-      function wireAddFiles(){
-        const staged = [];
-        renderFileChips(staged);
 
+      function wireAdders(){
         $("fileInput").addEventListener("change", e=>{
-          const files = Array.from(e.target.files||[]);
-          if (!files.length) return;
-          setText("fileStatus","Uploading "+files.length+" file(s)…");
-          // stage for UI, but also upload immediately
-          staged.push(...files);
-          renderFileChips(staged);
+          let picked = Array.from(e.target.files || []);
+          if (!picked.length) return;
 
-          const fd = new FormData();
-          files.forEach(f=> fd.append("files", f));
-          apiUpload('/api/datasets/'+encodeURIComponent(DATASET_ID)+'/files', fd)
-            .then(resp=>{
-              if (resp.dataset) DS = resp.dataset;
-              else if (resp.files) DS.files = resp.files;
-              else return apiGet('/api/datasets/'+encodeURIComponent(DATASET_ID)).then(x=>{ DS=x; });
-            })
-            .then(()=>{
-              renderFiles(DS);
-              setText("fileStatus","Uploaded ✔");
-              // clear staged list (they’re now server-side)
-              staged.length = 0; renderFileChips(staged);
-              setTimeout(()=>setText("fileStatus",""),1200);
-            })
-            .catch(e=> setText("fileStatus", e.message))
-            .finally(()=>{ e.target.value=""; });
-        });
-      }
+          // Archivos
+          picked = picked.filter(f => !isVideoByMime(f) && !isVideoByExt(f.name));
+          if (!picked.length){ setText("fileStatus","No valid non-video files selected."); e.target.value=""; return; }
 
-      // Agregar más videos
-      function renderVideoGridNew(staged){
-        const box = $("videoGridNew"); box.innerHTML = "";
-        if (!staged.length){ box.innerHTML = '<span class="muted">No videos selected</span>'; return; }
-        staged.forEach((f,i)=>{
-          const wrap = document.createElement("div");
-          wrap.className = "video-card";
-          const url = URL.createObjectURL(f);
-          wrap.innerHTML = '<video src="'+url+'" controls style="width:100%; height:160px; object-fit:cover"></video><button class="btn sm danger" data-i="'+i+'">Remove</button>';
-          wrap.querySelector("button").addEventListener("click", ()=>{
-            URL.revokeObjectURL(url);
-            staged.splice(i,1); renderVideoGridNew(staged);
-          });
-          box.appendChild(wrap);
+          staged.files.push(...picked);
+          renderStagedFiles();
+          if (!guardNewUploadsTotalOrWarn("files")){
+            staged.files.splice(-picked.length, picked.length);
+            renderStagedFiles();
+          }
+          e.target.value = "";
         });
-      }
-      function wireAddVideos(){
-        const staged = [];
-        renderVideoGridNew(staged);
 
         $("videoInput").addEventListener("change", e=>{
-          const vids = Array.from(e.target.files||[]);
-          if (!vids.length) return;
-          setText("videoStatus","Uploading "+vids.length+" video(s)…");
-          staged.push(...vids);
-          renderVideoGridNew(staged);
+          let picked = Array.from(e.target.files || []);
+          if (!picked.length) return;
 
-          const fd = new FormData();
-          vids.forEach(v=> fd.append("videos", v));
-          // NOTE: expects a multipart endpoint for videos
-          apiUpload('/api/datasets/'+encodeURIComponent(DATASET_ID)+'/videos', fd)
-            .then(resp=>{
-              if (resp.dataset) DS = resp.dataset;
-              else if (resp.videos) DS.videos = resp.videos;
-              else return apiGet('/api/datasets/'+encodeURIComponent(DATASET_ID)).then(x=>{ DS=x; });
-            })
-            .then(()=>{
-              renderVideosExisting(DS);
-              setText("videoStatus","Uploaded ✔");
-              staged.length = 0; renderVideoGridNew(staged);
-              setTimeout(()=>setText("videoStatus",""),1200);
-            })
-            .catch(e=> setText("videoStatus", e.message))
-            .finally(()=>{ e.target.value=""; });
+          // Videos
+          picked = picked.filter(f => isVideoByMime(f) || isVideoByExt(f.name));
+          if (!picked.length){ setText("videoStatus","No valid videos selected."); e.target.value=""; return; }
+
+          staged.videos.push(...picked);
+          renderStagedVideos();
+          if (!guardNewUploadsTotalOrWarn("videos")){
+            staged.videos.splice(-picked.length, picked.length);
+            renderStagedVideos();
+          }
+          e.target.value = "";
         });
       }
 
@@ -412,19 +558,18 @@ const datasetEdit = () => {
       $("backBtn").href = "/datasets/" + encodeURIComponent(DATASET_ID);
       $("btnCancel").href = "/datasets/" + encodeURIComponent(DATASET_ID);
 
-      apiGet('/api/datasets/'+encodeURIComponent(DATASET_ID))
+      apiGet(endpoints.getDataset(DATASET_ID))
         .then(ds=>{
           DS = ds;
           renderBasics(ds);
-          renderFiles(ds);
-          renderVideosExisting(ds);
+          return reloadAssets();
+        })
+        .then(()=>{
           wireBasics();
-          wireAddFiles();
-          wireAddVideos();
+          wireAdders();
           setText("saveStatus","");
         })
         .catch(e=> setText("saveStatus", e.message||"Failed to load"));
-
     })();
     </script>
   </body>

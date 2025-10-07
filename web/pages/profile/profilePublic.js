@@ -71,9 +71,9 @@ const profilePublic = () => {
           padding:12px; border-top:1px solid #0e1218;
         }
         .table tbody tr:first-child td{ border-top:none }
-        .col-name   { width: 58%; }
+        .col-name   { width: 50%; }
         .col-status { width: 22%; }
-        .col-votes  { width: 8%;  }
+        .col-votes  { width: 20%; white-space: nowrap; }
         .col-actions{ width: 12%; text-align:right; }
         .empty-row td{
           text-align:center; color:var(--muted); font-style:italic;
@@ -93,7 +93,6 @@ const profilePublic = () => {
         </div>
 
         <div class="top-actions">
-          <a id="btnMessages" class="btn">Messages</a>
           <button id="btnHome" class="btn icon" title="Home">🏠</button>
         </div>
       </header>
@@ -141,7 +140,7 @@ const profilePublic = () => {
               <tr>
                 <th class="col-name">Dataset name</th>
                 <th style="width:20%">Status</th>
-                <th class="col-votes">Votes</th>
+                <th class="col-votes">Avg rating</th>
                 <th class="col-actions">Action</th>
               </tr>
             </thead>
@@ -319,6 +318,9 @@ const profilePublic = () => {
 
             items.forEach(function(ds){
               var tr = document.createElement("tr");
+              const avg = Number.isFinite(ds.ratingAvg) ? Number(ds.ratingAvg) : 0;
+              const cnt = num(ds.ratingCount);
+              const ratingCell = cnt ? avg.toFixed(1) + " (" + cnt + ")" : "—";
               tr.innerHTML =
                 '<td class="col-name">' +
                   '<div style="display:flex; gap:10px; align-items:center">' +
@@ -332,7 +334,7 @@ const profilePublic = () => {
                   '</div>' +
                 '</td>' +
                 '<td class="col-status">' + pillHtml(ds.status) + '</td>' +
-                '<td class="col-votes">' + (ds.votes != null ? ds.votes : 0) + '</td>' +
+                '<td class="col-votes">' + ratingCell + '</td>' +
                 '<td class="col-actions">' +
                   '<button class="btn sm" data-id="' + (ds.datasetId || ds.id || ds._id || "") + '" data-action="view">View</button>' +
                 '</td>';
@@ -435,7 +437,6 @@ const profilePublic = () => {
           }
 
           // Topbar
-          $("btnMessages").addEventListener("click", function(){ window.location.href = "/messages.html"; });
           $("btnHome").addEventListener("click", function(){ window.location.href = "/home"; });
           var btnSearch = $("btnSearch");
           var inputQ = $("q");
