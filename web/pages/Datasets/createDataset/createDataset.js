@@ -27,7 +27,7 @@ const createDataset = () => {
           padding:12px 18px; border-bottom:1px solid #0e1218; background:rgba(11,13,16,.6)
         }
         .brand{display:flex; align-items:center; gap:10px; font-weight:600}
-        .brand .logo{width:28px; height:28px; border-radius:50%; background:#1a2230; display:inline-block}
+        .brand .logo{width:28px; height:28px; border-radius:50%; background:#000; display:inline-block;background-image: url(https://cdn-icons-png.flaticon.com/512/18495/18495588.png);background-size: contain;}        .top-actions{display:flex; gap:10px; align-items:center}
 
         .page{ max-width:1100px; margin:24px auto; padding:0 16px; display:grid; gap:18px; grid-template-columns:340px 1fr }
         @media (max-width: 900px){ .page{ grid-template-columns:1fr } }

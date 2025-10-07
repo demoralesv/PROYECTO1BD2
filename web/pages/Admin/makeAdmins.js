@@ -12,8 +12,11 @@ const makeAdmins = () => `
     th,td{padding:10px; border-bottom:1px solid #2a3340}
     button{padding:6px 12px; border-radius:8px; border:1px solid #2a3340; background:#0f1217; color:#e7eef7; cursor:pointer}
     .badge{padding:4px 8px; border-radius:8px; font-size:.85rem}
-    .admin{background:#14331c; color:#8ef7a1}
-    .user{background:#331414; color:#ff7b7b}
+    .admin{background:#077E8C; color:#fff}
+    .user{background:#D9512C; color:#000}
+    .demote{background:#B51513; margin:3px}
+    .promote{background:#085e42; margin:3px}
+    #msg{margin-bottom:12px}
     .btn.icon{padding:8px 10px; border-radius:999px}
     .btn, .input{
                 padding:18px 32px; /* Increased padding for bigger buttons */
@@ -21,29 +24,29 @@ const makeAdmins = () => `
                 background:#0f1217;  font-size:1.2rem; /* Larger font */
             }
     /* Topbar */
-            .topbar{
-                position:sticky; top:0; z-index:20; backdrop-filter:saturate(1.2) blur(4px);
-                display:flex; gap:12px; align-items:center; justify-content:space-between;
-                padding:12px 18px; border-bottom:1px solid #0e1218; background:rgba(11,13,16,.6)
-            }
-            .brand{display:flex; align-items:center; gap:10px; font-weight:600}
-            .brand .logo{width:28px; height:28px; border-radius:50%; background:#1a2230; display:inline-block}
-            .top-actions{display:flex; gap:10px; align-items:center}
-            .search-wrap{flex:1; display:flex; gap:8px; align-items:center; max-width:720px; margin:0 12px}
-            .search-wrap input{flex:1}
-  </style>
-</head>
-<body>
-<div class="topbar">
-            <div class="brand">
-                    <span class="logo"></span>
-                    Admin Panel
-            </div>
-            <div class="top-actions">
-                    <a href="/admin"><button class="btn icon" title="Back">
-                            <span>Go Back</span>
-                    </button></a>
-            </div>
+    .topbar{
+        position:sticky; top:0; z-index:20; backdrop-filter:saturate(1.2) blur(4px);
+        display:flex; gap:12px; align-items:center; justify-content:space-between;
+        padding:12px 18px; border-bottom:1px solid #0e1218; background:rgba(11,13,16,.6)
+    }
+    .brand{display:flex; align-items:center; gap:10px; font-weight:600}
+    .brand .logo{width:28px; height:28px; border-radius:50%; background:#000; display:inline-block;background-image: url(https://cdn-icons-png.flaticon.com/512/18495/18495588.png);background-size: contain;}        .top-actions{display:flex; gap:10px; align-items:center}
+        .top-actions{display:flex; gap:10px; align-items:center}
+        .search-wrap{flex:1; display:flex; gap:8px; align-items:center; max-width:720px; margin:0 12px}
+        .search-wrap input{flex:1}
+    </style>
+    </head>
+    <body>
+    <div class="topbar">
+    <div class="brand">
+            <span class="logo"></span>
+            Admin Panel
+    </div>
+    <div class="top-actions">
+            <a href="/admin"><button class="btn icon" title="Back">
+                    <span>Go Back</span>
+            </button></a>
+    </div>
     </div>
   <div class="wrap">
     <h2>User Management</h2>
