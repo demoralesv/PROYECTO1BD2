@@ -185,18 +185,14 @@ const home = () => {
       var tbody = $("tbody"); 
       tbody.innerHTML = '';
       if(!datasets || datasets.length === 0) return renderEmpty("No datasets found");
-
       datasets.forEach(function(ds){
         var avg = (typeof ds.ratingAvg === "number") ? ds.ratingAvg : 0;
         var cnt = (typeof ds.ratingCount === "number") ? ds.ratingCount : 0;
         var ratingCell = cnt ? (avg.toFixed(1) + " (" + cnt + ")") : "—";
-
         var tr = document.createElement("tr");
         tr.innerHTML =
           '<td class="col-name">' +
             '<div style="display:flex; gap:10px; align-items:center">' +
-            '<img class="avatar small" src="'+ dsAvatarUrl(ds) +'" alt="dataset avatar" />' +
-              '<div>' +
                 '<div style="font-weight:600">' + (ds.name || "Untitled dataset") + '</div>' +
                 '<div class="muted" style="font-size:.85rem">by @' +
                   ((ds.owner && ds.owner.username) || ds.ownerUsername || "unknown") +
@@ -223,8 +219,6 @@ const home = () => {
         tr.innerHTML =
           '<td class="col-name">'+
             '<div style="display:flex; gap:10px; align-items:center">'+
-              '<img class="avatar small" src="'+ dsAvatarUrl(ds) +'" alt="dataset avatar" />'+
-              '<div>'+
                 '<div style="font-weight:600">'+ (ds.name || "Untitled dataset") +'</div>'+
                 '<div class="muted" style="font-size:.85rem">by @'+ ((ds.owner && ds.owner.username) || ds.ownerUsername || "unknown") +'</div>'+
               '</div>'+
