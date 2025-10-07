@@ -153,6 +153,7 @@ const profilePublic = () => {
         </section>
       </main>
       <script>
+        
         (function () {
           var API = "http://localhost:3000"; 
 
@@ -195,7 +196,26 @@ const profilePublic = () => {
             return "https://api.dicebear.com/8.x/initials/svg?seed=" + s;
           }
 
-         
+          const btn = document.getElementById("btnFollow"); 
+  function setFollowState(following){
+    btn.dataset.following = following ? "1" : "0";
+    btn.textContent = following ? "Unfollow" : "Follow";
+  }
+
+  document.addEventListener("DOMContentLoaded", async () => {
+    try{
+      const res = await fetch(API + "/following/" + encodeURIComponent(ownerUsername), {
+        headers: { "Authorization": "Bearer " + localStorage.getItem("token") }
+      });
+      const data = await res.json();
+      if(res.ok) setFollowState(!!data.following);
+      else setFollowState(false); // fallback
+    }catch{
+      setFollowState(false);
+    }
+  });
+
+ 
           function getTargetUsername(){
             var u = new URL(window.location.href);
             var q = u.searchParams.get("u");
@@ -238,11 +258,11 @@ const profilePublic = () => {
           async function fetchUserDatasets(username){
             var candidates = [
               "/datasets?owner=" + encodeURIComponent(username)+
-    "&status=" + encodeURIComponent("approved"),
-              "/datasets?user=" + encodeURIComponent(username)+
-    "&status=" + encodeURIComponent("approved"),
-              "/datasets?username=" + encodeURIComponent(username)+
-    "&status=" + encodeURIComponent("approved")
+              "&status=" + encodeURIComponent("approved"),
+                        "/datasets?user=" + encodeURIComponent(username)+
+              "&status=" + encodeURIComponent("approved"),
+                        "/datasets?username=" + encodeURIComponent(username)+
+              "&status=" + encodeURIComponent("approved")
             ];
             for (const p of candidates){
               try {
@@ -279,6 +299,8 @@ const profilePublic = () => {
             }
             throw new Error("Unfollow endpoint not found");
           }
+
+
 
           // Render
           function renderProfile(p){
@@ -390,7 +412,7 @@ const profilePublic = () => {
               setText("statFollowing", num(viewed && viewed.stats && viewed.stats.following));
 
               // datasets del dueño
-              const ownerUsername = viewed.username || target || "";
+              const ownerUsername = viewed.username || target || ""; 
               const ds = isOwn
                 ? await apiGet("/datasets?mine=true")
                 : await fetchUserDatasets(ownerUsername);
@@ -408,6 +430,9 @@ const profilePublic = () => {
                   $("btnFollow").disabled = true;
                   try { await follow(ownerUsername);
                     $("btnFollow").style.display = "none";
+                    renderProfile(viewed);
+                    setText("statFollowers", num(viewed && viewed.stats && viewed.stats.followers));
+                    setText("statFollowing", num(viewed && viewed.stats && viewed.stats.following));
                     $("btnUnfollow").style.display = "inline-flex";
                   } catch(e){ alert(e.message || "Cannot follow"); }
                   $("btnFollow").disabled = false;
@@ -417,12 +442,31 @@ const profilePublic = () => {
                   try { await unfollow(ownerUsername);
                     $("btnUnfollow").style.display = "none";
                     $("btnFollow").style.display = "inline-flex";
+
                   } catch(e){ alert(e.message || "Cannot unfollow"); }
                   $("btnUnfollow").disabled = false;
                 };
+                try {
+    const res = await fetch(API + "/following/" + encodeURIComponent(ownerUsername), {
+      headers: { "Authorization": "Bearer " + localStorage.getItem("token") }
+    });
+    const data = await res.json();
+    if (res.ok && data.following) {
+      $("btnFollow").style.display = "none";
+      $("btnUnfollow").style.display = "inline-flex";
+    } else {
+      $("btnFollow").style.display = "inline-flex";
+      $("btnUnfollow").style.display = "none";
+    }
+  } catch (e) {
+    console.warn("Follow state check failed:", e.message);
+  }
+
+
                 $("btnMessage").onclick = function(){
                   window.location.href = "/messages.html?to=" + encodeURIComponent(ownerUsername);
                 };
+
               } else {
                 // acciones propias
                 var goNew = function(){ window.location.href = "/datasets/new"; };

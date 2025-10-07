@@ -24,7 +24,7 @@ const signup = () => {
       <input id="su_username" placeholder="Username" />
       <input id="su_fullname" placeholder="Full Name" />
       <input id="su_birth" type="date" />
-      <input id="su_avatar" placeholder="URL avatar (opcional)" />
+      <input id="su_avatar" placeholder="URL avatar (optional)" />
       <input id="su_password" type="password" placeholder="Password" />
       <button onclick="handleSignup()">Create Account</button>
       <a href="/"><button type="button">Cancel</button></a>
@@ -57,6 +57,9 @@ const signup = () => {
           const data = await res.json();
           if(!res.ok) throw new Error(data.error || "Signup failed");
           setMsg("su_msg", "Account Created ✔", true);
+          setTimeout(() => {
+            window.location.href = "/";
+          }, 1200);
           
           // localStorage.setItem("token", data.token);
         } catch(e) {

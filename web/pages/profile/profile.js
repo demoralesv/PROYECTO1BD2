@@ -111,7 +111,7 @@ const profile = () => {
         <div class="top-actions">
           <a id="btnMessages" class="btn">Messages</a>
           <button id="btnHome" class="btn icon" title="Home">🏠</button>
-          <button id="btnBackLogin" class="btn" title="Log out">Log Out</button>
+          <button id="btnBackLogin" class="btn" title="Log out">⎋</button>
         </div>
       </header>
 
@@ -134,6 +134,7 @@ const profile = () => {
           </div>
           <div class="divider"></div>
           <button id="btnEdit" class="btn">Edit Profile</button>
+          <button id="btnAdmin" style="display:none" class="btn">Admin Panel</button>
         </aside>
 
         <section class="card panel">
@@ -303,6 +304,15 @@ const profile = () => {
           });
           $("btnEdit").addEventListener("click", function(){
             window.location.href = "/profile/edit";
+          });
+          apiGet("/me").then(function(me){
+            var btnAdmin = $("btnAdmin");
+            if (btnAdmin) {
+              btnAdmin.style.display = (me && me.role === "admin") ? "" : "none";
+            }
+          });
+          $("btnAdmin").addEventListener("click", function(){
+            window.location.href = "/admin";
           });
           $("btnHome").addEventListener("click", function(){
             window.location.href = "/home";

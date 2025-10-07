@@ -44,6 +44,12 @@ import { getFollowCounts } from "./src/routes/getFollowCounts.js";
 import { postComment } from "./src/routes/createComment.js";
 import { getComments } from "./src/routes/getComments.js";
 import { deleteComment } from "./src/routes/deleteComment.js";
+import adminPanel from "./web/pages/Admin/adminPanel.js";
+import makeAdmins from "./web/pages/Admin/makeAdmins.js";
+import approveDS from "./web/pages/Admin/approveDS.js";
+import adminRoutes from "./src/routes/adminController.js";
+import manageDatasets from "./src/routes/manageDatasets.js";
+import startFollowing from "./src/routes/startFollowing.js";
 
 //Chats
 import createChat from "./src/routes/chatCreate.js";
@@ -104,7 +110,16 @@ app.get("/profile/edit", (req, res) => {
 app.get("/profile/:username", (req, res) => {
   res.send(profilePublic());
 });
-
+//admin panel
+app.get("/admin", (req, res) => {
+  res.send(adminPanel());
+});
+app.get("/manageUsers", (req, res) => {
+  res.send(makeAdmins());
+});
+app.get("/manageDatasets", (req, res) => {
+  res.send(approveDS());
+});
 //ver seguidores
 app.get("/followers", (req, res) => {
   res.send(followers());
@@ -1249,6 +1264,9 @@ app.use(datasetApproved);
 app.use(getFollowers);
 app.use(getFollowing);
 app.use(getUserProfile);
+app.use("/admin", adminRoutes);
+app.use("/admin", manageDatasets);
+app.use(startFollowing);
 // Start server
 app.listen(PORT, () => {
   console.log(`Server running at http://localhost:${PORT}`);

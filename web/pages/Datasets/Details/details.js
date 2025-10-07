@@ -123,12 +123,12 @@ const datasetView = () => {
         <div class="divider"></div>
 
         <div>
-        <div class="muted" style="margin-bottom:6px">Owner</div>
+        <div class="muted" style="margin-bottom:6px">Owner, click on username to view profile</div>
         <div class="owner">
             <img id="ownerAvatar" alt="owner avatar" />
             <div>
             <div id="ownerName">—</div>
-            <div class="muted" id="ownerUsername">@user</div>
+            <a id="userProfile" style="text-decoration:none"><div class="muted" id="ownerUsername">@user</div></a>
             </div>
         </div>
         </div>
@@ -654,6 +654,7 @@ const datasetView = () => {
         "https://api.dicebear.com/8.x/initials/svg?seed=" + encodeURIComponent(o.fullName || o.username || "Owner");
         setText("ownerName", o.fullName || "—");
         setText("ownerUsername", o.username ? "@" + o.username : "@user");
+        $("userProfile").href = o.username ? ("/profile/" + encodeURIComponent(o.username)) : "#";
 
         setText("dsDesc", ds.description || "—");
         setStatusPill(ds.status);
