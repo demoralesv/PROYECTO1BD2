@@ -24,11 +24,13 @@ import followers from "./web/pages/Followers-Following/Followers/followers.js";
 import following from "./web/pages/Followers-Following/Following/following.js";
 import chatPage from "./web/pages/Chat/chat.js";
 import searchPage from "./web/pages/Search/search.js";
+import downloadsPage from "./web/pages/Downloads/downloads.js";
 import getFollowers from "./src/routes/getFollowers.js";
 import getFollowing from "./src/routes/getFollowing.js";
 import profilePublic from "./web/pages/profile/profilePublic.js";
 import getUserProfile from "./src/routes/getUserProfile.js";
 import searchRouter from "./src/routes/search.js";
+import neo4j from "neo4j-driver";
 
 import { verifyToken } from "./src/routes/auth.routes.js";
 import { tryAuth } from "./src/routes/auth.routes.js";
@@ -135,6 +137,12 @@ app.get("/search", (req, res) => {
 app.get("/datasets/:id/edit", (req, res) => {
   res.send(datasetEdit());
 });
+
+// Página de usuarios que han descargado un dataset
+app.get("/datasets/:id/downloads", (req, res) => {
+  res.send(downloadsPage());
+});
+
 // Login
 app.post("/auth/login", async (req, res) => {
   try {
@@ -351,7 +359,6 @@ app.get("/datasets", verifyToken, async (req, res) => {
     const items = await Dataset.find(filter).sort({ createdAt: -1 }).lean();
     const total = await Dataset.countDocuments(filter);
 
-    // 🔎 Pull rating+downloads from Neo4j for ALL datasets at once
     const ids = items.map((d) => String(d._id));
     let metricsById = new Map();
     if (ids.length) {
@@ -398,7 +405,6 @@ app.get("/datasets", verifyToken, async (req, res) => {
           name: d.name,
           description: d.description,
           status: d.status,
-          // ⬇️ new fields from Neo4j
           ratingAvg: m.ratingAvg,
           ratingCount: m.ratingCount,
           downloadsCount: m.downloadsCount,
@@ -451,7 +457,6 @@ app.get("/api/datasets/:id", tryAuth, async (req, res) => {
       const neo = await session.executeRead((tx) =>
         tx.run(
           `
-          // Always return one row; even if the node isn't in Neo4j yet
           WITH 1 AS _
           OPTIONAL MATCH (d:Dataset {ID:$dsId})
           OPTIONAL MATCH (me:User {ID:$meId})-[mv:VOTED]->(d)
@@ -771,6 +776,58 @@ function uniqueName(name, used) {
   return out;
 }
 // Descargar los archivos
+async function recordDownload({ session, userId, datasetId, source, assetId }) {
+  const result = await session.executeWrite((tx) =>
+    tx.run(
+      `
+      MERGE (u:User    {ID: $userId})
+      MERGE (d:Dataset {ID: $datasetId})
+      MERGE (u)-[r:DOWNLOADED]->(d)
+      ON CREATE SET r.count = 1, r.firstAt = timestamp(), r.lastAt = timestamp()
+      ON MATCH  SET r.count = r.count + 1, r.lastAt = timestamp()
+      SET r.source  = coalesce($source, r.source),
+          r.assetId = coalesce($assetId, r.assetId),
+          d.downloadsCount = coalesce(d.downloadsCount, 0) + 1
+      RETURN d.downloadsCount AS downloadsCount, r.count AS userCount
+      `,
+      { userId: String(userId), datasetId: String(datasetId), source, assetId }
+    )
+  );
+
+  const rec = result.records[0];
+  const toNum = (x) => (x && x.toNumber ? x.toNumber() : x);
+  return {
+    downloadsCount: toNum(rec.get("downloadsCount")),
+    userCount: toNum(rec.get("userCount")),
+  };
+}
+app.post("/api/datasets/:id/track-download", verifyToken, async (req, res) => {
+  try {
+    const { id } = req.params;
+    if (!isMongoObjectId(id)) return res.status(400).json({ error: "bad id" });
+
+    const ds = await Dataset.findById(id).lean();
+    if (String(ds?.owner) === String(req.userId))
+      return res.json({ ok: true, downloadsCount: null });
+    const session = driver.session();
+
+    const { source = "zip", assetId = null } = req.body || {};
+    const { downloadsCount, userCount } = await recordDownload({
+      session,
+      userId: req.userId,
+      datasetId: id,
+      source,
+      assetId,
+    });
+
+    res.json({ ok: true, downloadsCount, userCount });
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  } finally {
+    await session.close();
+  }
+});
+// Descargar .zip
 app.get("/api/datasets/:id/download", verifyToken, async (req, res) => {
   try {
     const { id } = req.params;
@@ -824,6 +881,99 @@ app.get("/api/datasets/:id/download", verifyToken, async (req, res) => {
     await archive.finalize();
   } catch (e) {
     res.status(500).json({ error: e.message });
+  }
+});
+// Lista de usuarios que han descargado un archivo
+app.get("/api/datasets/:id/downloads", verifyToken, async (req, res) => {
+  const { id } = req.params;
+  if (!isMongoObjectId(id)) return res.status(400).json({ error: "bad id" });
+
+  const ds = await Dataset.findById(id).lean();
+  if (!ds) return res.status(404).json({ error: "dataset not found" });
+  if (String(ds.owner) !== String(req.userId))
+    return res
+      .status(403)
+      .json({ error: "only the owner can view downloaders" });
+
+  const pageQ = Number(req.query.page);
+  const sizeQ = Number(req.query.size ?? req.query.limit);
+  const page = Number.isFinite(pageQ) && pageQ >= 0 ? Math.floor(pageQ) : 0;
+  const size =
+    Number.isFinite(sizeQ) && sizeQ > 0 ? Math.min(100, Math.floor(sizeQ)) : 50;
+  const skip = page * size;
+
+  const session = driver.session();
+  try {
+    // Filas
+    const r1 = await session.executeRead((tx) =>
+      tx.run(
+        `
+        MATCH (u:User)-[r:DOWNLOADED]->(d:Dataset {ID:$dsId})
+        RETURN u.ID AS userId, r.count AS count, r.firstAt AS firstAt, r.lastAt AS lastAt
+        ORDER BY r.lastAt DESC
+        SKIP toInteger($skip) LIMIT toInteger($limit)
+        `,
+        { dsId: String(id), skip, limit: size }
+      )
+    );
+
+    // Totales
+    const r2 = await session.executeRead((tx) =>
+      tx.run(
+        `
+        MATCH (u:User)-[r:DOWNLOADED]->(d:Dataset {ID:$dsId})
+        RETURN count(DISTINCT u) AS uniqueDownloaders, coalesce(sum(r.count),0) AS totalDownloads
+        `,
+        { dsId: String(id) }
+      )
+    );
+
+    const toNum = (x) => (x && x.toNumber ? x.toNumber() : x);
+
+    const itemsRaw = r1.records.map((rec) => ({
+      userId: rec.get("userId"),
+      count: toNum(rec.get("count")) ?? 0,
+      firstAt: toNum(rec.get("firstAt")) ?? null,
+      lastAt: toNum(rec.get("lastAt")) ?? null,
+    }));
+
+    // Unir con info de MongoDB
+    const ids = itemsRaw.map((x) => x.userId).filter(Boolean);
+    const users = await User.find(
+      { _id: { $in: ids } },
+      { _id: 1, username: 1, fullname: 1, fullName: 1, avatarUrl: 1 }
+    ).lean();
+    const byId = new Map(users.map((u) => [String(u._id), u]));
+    const items = itemsRaw.map((row) => {
+      const u = byId.get(String(row.userId)) || {};
+      return {
+        userId: row.userId,
+        username: u.username || null,
+        fullName: u.fullname || u.fullName || null,
+        avatarUrl: u.avatarUrl || null,
+        count: row.count,
+        firstAt: row.firstAt,
+        lastAt: row.lastAt,
+      };
+    });
+
+    const rec2 = r2.records[0];
+    const uniqueDownloaders = rec2
+      ? toNum(rec2.get("uniqueDownloaders")) || 0
+      : 0;
+    const totalDownloads = rec2 ? toNum(rec2.get("totalDownloads")) || 0 : 0;
+
+    res.json({
+      page,
+      limit: size,
+      items,
+      total: uniqueDownloaders,
+      totals: { uniqueDownloaders, totalDownloads },
+    });
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  } finally {
+    await session.close();
   }
 });
 // Obtener el ID de un archivo
@@ -1010,6 +1160,7 @@ app.delete(
   deleteAssetHandler
 );
 app.delete("/datasets/:id/assets/:assetId", verifyToken, deleteAssetHandler);
+// Ver descargas de un dataset
 
 // publicar un comentario
 app.post("/posts/:postId/comments", async (req, res) => {

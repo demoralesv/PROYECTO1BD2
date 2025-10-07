@@ -271,6 +271,11 @@ const datasetView = () => {
         if (isOwner) { if (link)  link.textContent  = txt; }
         else         { if (count) count.textContent = txt; }
     }
+    function updateDownloadsDisplay(n){
+    const label = n + (n === 1 ? " download" : " downloads");
+    const link  = $("downloadsLink");   if (link)  link.textContent  = label;
+    const count = $("downloadsCount");  if (count) count.textContent = label;
+    }
 
     function computeIsOwner(me, ds){
         function toList(x){ return [x && x._id, x && x.id, x && x.userId, x && x.username].filter(Boolean).map(String); }
@@ -686,10 +691,20 @@ const datasetView = () => {
                     (f.name || "unnamed") + "</span>" +
                     " <span class='muted'>· " + bytesFmt(f.bytes) + "</span>";
 
-                btn.addEventListener("click", function () {
+                btn.addEventListener("click", async function () {
                     const path = "/api/datasets/" + encodeURIComponent(datasetMongoId) +
                                 "/assets/" + encodeURIComponent(f.assetId);
-                    downloadBlob(path, f.name || "file");
+                    try {
+                        const t = await apiPost(
+                        "/api/datasets/" + encodeURIComponent(datasetMongoId) + "/track-download",
+                        { source: "file", assetId: f.assetId }
+                        );
+                        if (t && Number.isFinite(t.downloadsCount)) {
+                        updateDownloadsDisplay(t.downloadsCount);
+                        }
+                    } catch (_) { }
+
+                    await downloadBlob(path, f.name || "file");
                 });
 
                 fileList.appendChild(btn);
@@ -736,13 +751,12 @@ const datasetView = () => {
         });
 
         // Descargas
-        var downloads = Number.isFinite(ds.downloads) ? ds.downloads : 0;
+        var downloads = Number.isFinite(ds.downloadsCount) ? ds.downloadsCount : 0;
+        updateDownloadsDisplay(downloads);
         var downloadsLink = $("downloadsLink");
         if (downloadsLink) {
-        downloadsLink.textContent = downloads + (downloads === 1 ? " download" : " downloads");
+        downloadsLink.href = "/datasets/" + encodeURIComponent(datasetMongoId) + "/downloads";
         downloadsLink.addEventListener("click", function(e){
-            e.preventDefault();
-            alert("This will show the list of users who downloaded this dataset.");
         });
         }
 
@@ -753,14 +767,24 @@ const datasetView = () => {
         const btnDelete   = $("btnDelete");
         // Descargar un .zip
         btnDownload?.addEventListener("click", async function(){
-        try {
-            await downloadBlob(
-            "/api/datasets/" + encodeURIComponent(datasetMongoId) + "/download",
-            (ds.name || "dataset") + ".zip"
-            );
-        } catch (e) {
-            setText("status", e.message || "Failed to download");
-        }
+            try {
+                // 1) bump counter & relation first
+                const t = await apiPost(
+                "/api/datasets/" + encodeURIComponent(datasetMongoId) + "/track-download",
+                { source: "zip" }
+                );
+                if (t && Number.isFinite(t.downloadsCount)) {
+                updateDownloadsDisplay(t.downloadsCount);
+                }
+
+                // 2) then start the actual download
+                await downloadBlob(
+                "/api/datasets/" + encodeURIComponent(datasetMongoId) + "/download",
+                (ds.name || "dataset") + ".zip"
+                );
+            } catch (e) {
+                setText("status", e.message || "Failed to download");
+            }
         });
 
         // Botón de editar
