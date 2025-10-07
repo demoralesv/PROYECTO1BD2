@@ -20,7 +20,7 @@ const downloadsPage = () => {
         display:flex; gap:12px; align-items:center; justify-content:space-between;
         padding:12px 18px; border-bottom:1px solid var(--line); background:rgba(11,13,16,.6) }
       .brand{display:flex; align-items:center; gap:10px; font-weight:600}
-      .brand .logo{width:28px; height:28px; border-radius:50%; background:#1a2230; display:inline-block}
+        .brand .logo{width:28px; height:28px; border-radius:50%; background:#000; display:inline-block;background-image: url(https://cdn-icons-png.flaticon.com/512/18495/18495588.png);background-size: contain;}        .top-actions{display:flex; gap:10px; align-items:center}
       .top-actions{display:flex; gap:10px; align-items:center}
       .page{ min-height:calc(100vh - 60px); padding:32px; display:flex; justify-content:center }
       .panel{ padding:24px; width:100%; max-width:960px }

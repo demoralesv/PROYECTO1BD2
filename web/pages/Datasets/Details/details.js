@@ -19,7 +19,7 @@ const datasetView = () => {
     .muted{ color:var(--muted) }
     .topbar{ position:sticky; top:0; z-index:20; backdrop-filter:saturate(1.2) blur(4px); display:flex; gap:12px; align-items:center; justify-content:space-between; padding:12px 18px; border-bottom:1px solid #0e1218; background:rgba(11,13,16,.6) }
     .brand{display:flex; align-items:center; gap:10px; font-weight:600}
-    .logo{ width:28px; height:28px; border-radius:50%; background:#1a2230; display:inline-block }
+        .brand .logo{width:28px; height:28px; border-radius:50%; background:#000; display:inline-block;background-image: url(https://cdn-icons-png.flaticon.com/512/18495/18495588.png);background-size: contain;}        .top-actions{display:flex; gap:10px; align-items:center}
     .btn.sm{ padding:6px 8px; font-size:.85rem }
     .comment-body{ white-space:pre-wrap; }
     .replies{ display:grid; gap:10px; margin-top:6px }
