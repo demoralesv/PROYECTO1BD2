@@ -56,6 +56,7 @@ import createChat from "./src/routes/chatCreate.js";
 import sendMessage from "./src/routes/chatSendMessage.js";
 import getMessages from "./src/routes/chatGetMessages.js";
 import getUserChats from "./src/routes/chatGetUserChats.js";
+import chatRoutes from "./src/routes/chat.routes.js";
 
 //servicio de notificaciones
 import { addNotification } from "./src/routes/addNotification.js";
@@ -72,7 +73,7 @@ app.use(express.static("pages"));
 // Middleware to parse JSON
 app.use(express.json());
 app.use(searchRouter);
-
+app.use(chatRoutes);
 connectDB();
 await initCassandra();
 await initNeo4j();
