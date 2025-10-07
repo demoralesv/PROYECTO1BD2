@@ -1,4 +1,4 @@
-import redisClient from "../../databases/redis.js";
+import redisClient from "../databases/redis.js";
 import { randomUUID } from "crypto";
 
 /**

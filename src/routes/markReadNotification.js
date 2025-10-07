@@ -1,4 +1,4 @@
-import redisClient from "../../databases/redis.js";
+import redisClient from "../databases/redis.js";
 
 export async function markAsRead(userId, notifId) {
   const raw = await redisClient.lRange(`notificaciones:user:${userId}`, 0, -1);

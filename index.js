@@ -50,7 +50,7 @@ import getMessages from "./src/routes/chatGetMessages.js";
 import getUserChats from "./src/routes/chatGetUserChats.js";
 
 //servicio de notificaciones
-import { addNotification } from "./src/routes/addNotification.js"; 
+import { addNotification } from "./src/routes/addNotification.js";
 import { getNotifications } from "./src/routes/getNotification.js";
 import { markAsRead } from "./src/routes/markReadNotification.js";
 
@@ -1033,17 +1033,12 @@ app.post("/posts/:postId/comments", async (req, res) => {
     res.status(500).json({ error: "Internal server error" });
   }
 });
-
-
-
 // borrar un comentario
 app.delete("/posts/:postId/comments/:commentId", deleteComment);
 // obtener los comentarios
 app.get("/posts/:postId/comments", getComments);
 // editar un comentario
-app.patch("/:postId/:commentId", editComment); // Editar comentario
-
-
+//app.patch("/:postId/:commentId", editComment); // Editar comentario
 
 /* Crear un nuevo chat entre dos usuarios
 
@@ -1063,18 +1058,22 @@ POST /chats/abc123/messages
   "mensaje": "Hola!"
 } */
 app.post("/chats/:chatId/messages", async (req, res) => {
-  const mensaje = await sendMessage(req, res); 
+  const mensaje = await sendMessage(req, res);
 
-  const chatParticipants = await getChatParticipants(req.params.chatId); 
+  const chatParticipants = await getChatParticipants(req.params.chatId);
   for (const u of chatParticipants) {
     if (u !== mensaje.idAutor) {
-      await addNotification(u, "mensaje", req.params.chatId, `Nuevo mensaje de ${mensaje.idAutor}`);
+      await addNotification(
+        u,
+        "mensaje",
+        req.params.chatId,
+        `Nuevo mensaje de ${mensaje.idAutor}`
+      );
     }
   }
 
   res.status(201).json(mensaje);
 });
-
 
 /* Obtener mensajes de un chat
 Uso

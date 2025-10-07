@@ -1,4 +1,4 @@
-import redisClient from "../../databases/redis.js";
+import redisClient from "../databases/redis.js";
 
 export async function editComment(req, res) {
   try {
