@@ -344,7 +344,38 @@ const chatPage = () => {
   function escapeHtml(s){ return (s||"").replace(/[&<>"]/g, c=>({ "&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;" }[c])); }
 
   searchInput.addEventListener('input', (e)=> renderList(e.target.value));
-  loadChats(); // initial load
+  function qs(name){ return new URLSearchParams(location.search).get(name); }
+
+    document.addEventListener("DOMContentLoaded", async () => {
+    await loadChats();
+
+    const to = qs("to");
+    if (to) {
+        try {
+        const res = await fetch(API + "/api/chat/start/" + encodeURIComponent(to), {
+            method: "POST",
+            headers: {
+            "Authorization": "Bearer " + localStorage.getItem("token"),
+            "Content-Type": "application/json"
+            }
+        });
+        const data = await res.json();
+        if (!res.ok) throw new Error(data.error || "Cannot start chat");
+
+
+        await loadChats();
+        openChat(data.chatId);
+
+        
+        history.replaceState({}, "", "/chat");
+        } catch(e){
+        alert(e.message || "Cannot open chat");
+        }
+    }
+    });
+
+    
+    if (!qs("to")) loadChats();
 })();
 </script>
 </body>

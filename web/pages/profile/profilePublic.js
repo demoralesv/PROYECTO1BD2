@@ -464,9 +464,9 @@ const profilePublic = () => {
 
 
                 $("btnMessage").onclick = function(){
-                  window.location.href = "/messages.html?to=" + encodeURIComponent(ownerUsername);
+                  window.location.href = "/chat?to=" + encodeURIComponent(ownerUsername);
                 };
-
+                
               } else {
                 // acciones propias
                 var goNew = function(){ window.location.href = "/datasets/new"; };
