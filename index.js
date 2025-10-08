@@ -57,6 +57,7 @@ import sendMessage from "./src/routes/chatSendMessage.js";
 import getMessages from "./src/routes/chatGetMessages.js";
 import getUserChats from "./src/routes/chatGetUserChats.js";
 import chatRoutes from "./src/routes/chat.routes.js";
+import badgesRouter from "./src/routes/badge.routes.js";
 
 //servicio de notificaciones
 import { addNotification } from "./src/routes/addNotification.js";
@@ -1412,6 +1413,7 @@ app.use(getUserProfile);
 app.use("/admin", adminRoutes);
 app.use("/admin", manageDatasets);
 app.use(startFollowing);
+app.use(badgesRouter);
 // Start server
 app.listen(PORT, () => {
   console.log(`Server running at http://localhost:${PORT}`);

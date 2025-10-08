@@ -22,6 +22,22 @@ const profile = () => {
         .btn.primary{background:#0f141c}
         .btn.icon{padding:8px 10px; border-radius:999px}
         .btn[disabled]{opacity:.5; cursor:not-allowed}
+        .badge-wrap { position: relative; }
+        .badge {
+          position: absolute;
+          top: -4px; right: -4px;
+          min-width: 10px; height: 10px;
+          padding: 0 5px;
+          border-radius: 999px;
+          background: #eb5757;
+          color: #fff;
+          font-size: 11px;
+          line-height: 16px;
+          display: inline-flex;
+          align-items: center; justify-content: center;
+          border: 1px solid #0b0d10; /* ring for dark bg */
+        }
+        .badge.dot { min-width: 10px; padding: 0; line-height: 10px; }
         .chip{padding:2px 8px; border:1px solid var(--line); border-radius:999px; font-size:.8rem; color:var(--muted)}
         .card{background:var(--panel); border-radius:16px; box-shadow:0 10px 30px rgba(0,0,0,.3)}
         .muted{color:var(--muted)}
@@ -109,7 +125,10 @@ const profile = () => {
         </div>
 
         <div class="top-actions">
-          <a id="btnMessages" class="btn">Messages</a>
+          <a id="btnMessages" class="btn badge-wrap">
+            Messages
+            <span id="msgBadge" class="badge" style="display:none"></span>
+          </a>
           <button id="btnHome" class="btn icon" title="Home">🏠</button>
           <button id="btnBackLogin" class="btn" title="Log out">⎋</button>
         </div>
@@ -196,7 +215,30 @@ const profile = () => {
             var d = new Date(s);
             return d.toISOString().split("T")[0];
           }
+          function fetchBadges(){
+            return fetch(API + "/api/badges", {
+              headers: Object.assign({ "Content-Type": "application/json" }, authHeaders())
+            }).then(r => r.ok ? r.json() : r.json().then(d => { throw new Error(d.error||"Badges error"); }));
+          }
 
+          function setMessagesBadge(n){
+            var el = document.getElementById("msgBadge");
+            if (!el) return;
+            if (n > 0) {
+              // El punto
+              el.classList.add("dot");
+              el.textContent = "";
+
+              el.style.display = "";
+            } else {
+              el.style.display = "none";
+            }
+          }
+          function refreshBadges(){
+            fetchBadges()
+              .then(function(b){ setMessagesBadge(b.messages || 0); })
+              .catch(function(){ /* ignore */ });
+          }
           // Renders para la interfaz
           function renderProfile(p){
             var avatar = (p && p.avatarUrl)
@@ -294,13 +336,22 @@ const profile = () => {
               renderDatasets([]);
             });
           }
-
+          refreshBadges();
+          setInterval(refreshBadges, 30000);
+          window.addEventListener("focus", refreshBadges);
           // Botones en la barra de arriba
           $("btnAddDataset").addEventListener("click", function(){
             window.location.href = "/datasets/new";
           });
           $("btnMessages").addEventListener("click", function(){
-            window.location.href = "/chat";
+            // Limpiar notificación
+            fetch(API + "/api/badges/clear", {
+              method: "POST",
+              headers: Object.assign({ "Content-Type":"application/json" }, authHeaders()),
+              body: JSON.stringify({ type: "mensaje" })
+            }).finally(function(){
+              window.location.href = "/chat";
+            });
           });
           $("btnEdit").addEventListener("click", function(){
             window.location.href = "/profile/edit";
