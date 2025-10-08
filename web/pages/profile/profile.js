@@ -35,7 +35,7 @@ const profile = () => {
           line-height: 16px;
           display: inline-flex;
           align-items: center; justify-content: center;
-          border: 1px solid #0b0d10; /* ring for dark bg */
+          border: 1px solid #0b0d10;
         }
         .badge.dot { min-width: 10px; padding: 0; line-height: 10px; }
         .chip{padding:2px 8px; border:1px solid var(--line); border-radius:999px; font-size:.8rem; color:var(--muted)}
