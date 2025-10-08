@@ -28,7 +28,22 @@ const home = () => {
       .page{ min-height:calc(100vh - 60px); padding:32px; display:flex; justify-content:center }
       .panel{ padding:24px; width:100%; max-width:960px }
       .avatar.small{ width:32px; height:32px; border-radius:50%; display:block; object-fit:cover; }
-      
+      .badge-wrap { position: relative; }
+        .badge {
+          position: absolute;
+          top: -4px; right: -4px;
+          min-width: 10px; height: 10px;
+          padding: 0 5px;
+          border-radius: 999px;
+          background: #eb5757;
+          color: #fff;
+          font-size: 11px;
+          line-height: 16px;
+          display: inline-flex;
+          align-items: center; justify-content: center;
+          border: 1px solid #0b0d10; /* ring for dark bg */
+        }
+        .badge.dot { min-width: 10px; padding: 0; line-height: 10px; }
       /* Opciones de búsqueda */
       .subtabs{ display:flex; gap:8px; align-items:center; border-bottom:1px solid var(--line); margin-bottom:16px }
       .tab{ padding:10px 12px; border:1px solid var(--line); border-bottom:none; border-radius:10px 10px 0 0; cursor:pointer; color:var(--muted); background:#0f1217 }
@@ -54,7 +69,10 @@ const home = () => {
         <button id="go" class="btn icon" title="Search"><span>🔍</span></button>
       </div>
       <div class="top-actions">
+
         <a href="/datasets/new" class="btn">Upload Dataset</a>
+        <a id="btnMessages" class="btn badge-wrap">&#9993;<span id="msgBadge" class="badge" style="display:none"></span>
+          </a>
         <a href="/profile" class="btn icon" title="Profile"><img id="avatarTopbar" class="avatar small" alt="avatar" src="" /></a>
       </div>
     </div>
@@ -100,6 +118,35 @@ const home = () => {
     function displayName(u) {
       return (u && (u.fullName || u.fullname)) || "Unnamed";
     }
+    function fetchBadges(){
+            return fetch(API + "/api/badges", {
+              headers: Object.assign({ "Content-Type": "application/json" }, authHeaders())
+            }).then(r => r.ok ? r.json() : r.json().then(d => { throw new Error(d.error||"Badges error"); }));
+          }
+
+          function setMessagesBadge(n){
+            var el = document.getElementById("msgBadge");
+            if (!el) return;
+            if (n > 0) {
+              // El punto
+              el.classList.add("dot");
+              el.textContent = "";
+
+              el.style.display = "";
+            } else {
+              el.style.display = "none";
+            }
+          }
+          function refreshBadges(){
+            fetchBadges()
+              .then(function(b){ setMessagesBadge(b.messages || 0); })
+              .catch(function(){ /* ignore */ });
+          }
+
+
+
+
+
 
     function dsAvatarUrl(ds){
       var name = (ds && ds.name) || "dataset";
@@ -253,7 +300,19 @@ const home = () => {
           renderEmpty("Failed to load results");
         });
     }
-
+          refreshBadges();
+          setInterval(refreshBadges, 30000);
+          window.addEventListener("focus", refreshBadges);
+          $("btnMessages").addEventListener("click", function(){
+            // Limpiar notificación
+            fetch(API + "/api/badges/clear", {
+              method: "POST",
+              headers: Object.assign({ "Content-Type":"application/json" }, authHeaders()),
+              body: JSON.stringify({ type: "mensaje" })
+            }).finally(function(){
+              window.location.href = "/chat";
+            });
+          });
     // Cargar avatar del usuario
     fetch(API + "/me", { headers: authHeaders() }).then(r=>r.json()).then(function(me){
       var topbar = $("avatarTopbar");
