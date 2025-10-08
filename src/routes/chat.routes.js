@@ -1,20 +1,14 @@
 import { Router } from "express";
-import { verifyToken } from "./auth.routes.js";         // you already use this
-import driver from "../databases/neo4j.js";             // (optional) if you want to show peer names via Neo4j
-import User from "../models/User.js";                   // to resolve username/avatar from _id
+import { verifyToken } from "./auth.routes.js";                  
+import User from "../models/User.js";                 
 
 import redisClient from "../databases/redis.js";
 import { randomUUID } from "crypto";
-
-import { getUserChats } from "./chatGetUserChats.js";  // existing
-import { getMessages } from "./chatGetMessages.js";    // existing
-import { sendMessage as sendMsgAppend } from "./chatSendMessage.js"; // existing
+import { getMessages } from "./chatGetMessages.js";    
+import { sendMessage as sendMsgAppend } from "./chatSendMessage.js";
 
 const router = Router();
 
-/**
- * Helper: normalize a chatKey "chat:<id>" → "<id>"
- */
 function keyToId(chatKey) {
   return (chatKey || "").replace(/^chat:/, "");
 }
@@ -49,7 +43,7 @@ router.post("/api/chat/start/:username", verifyToken, async (req, res) => {
     await Promise.all([
       redisClient.rPush(`user:${me._id}:chats`, chatKey),
       redisClient.rPush(`user:${target._id}:chats`, chatKey),
-      // store chat meta to resolve participants quickly
+     
       redisClient.set(`chat:${chatId}:meta`, JSON.stringify({
         users: [String(me._id), String(target._id)],
         createdAt: Date.now()
@@ -78,7 +72,7 @@ router.get("/api/chat", verifyToken, async (req, res) => {
       const metaRaw = await redisClient.get(`chat:${chatId}:meta`);
       let users = [];
       try { users = JSON.parse(metaRaw || "{}").users || []; } catch {}
-      // Get the "peer" (the other user)
+     
       const peerId = users.find(u => u !== String(req.userId));
       let peer = null;
       if (peerId) {
@@ -107,7 +101,7 @@ router.get("/api/chat", verifyToken, async (req, res) => {
  * GET /api/chat/:chatId/messages
  */
 router.get("/api/chat/:chatId/messages", verifyToken, async (req, res) => {
-  // delegate to your existing handler
+  
   return getMessages(req, res);
 });
 
@@ -117,7 +111,7 @@ router.get("/api/chat/:chatId/messages", verifyToken, async (req, res) => {
  * body: { mensaje: string }
  */
 router.post("/api/chat/:chatId/messages", verifyToken, async (req, res) => {
-  // Reuse your append function, but inject userId
+  
   req.body.userId = String(req.userId);
   return sendMsgAppend(req, res);
 });

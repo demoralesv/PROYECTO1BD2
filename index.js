@@ -1349,61 +1349,7 @@ app.post("/posts/:postId/comments", async (req, res) => {
 app.delete("/posts/:postId/comments/:commentId", deleteComment);
 // obtener los comentarios
 app.get("/posts/:postId/comments", getComments);
-// editar un comentario
-//app.patch("/:postId/:commentId", editComment); // Editar comentario
 
-/* Crear un nuevo chat entre dos usuarios
-
-Uso
-POST /chats/create
-{
-  "userA": "u123",
-  "userB": "u456"
-}*/
-app.post("/chats/create", createChat);
-
-/* Enviar mensaje a un chat
-Uso
-POST /chats/abc123/messages
-{
-"userId": "u123",
-  "mensaje": "Hola!"
-} */
-app.post("/chats/:chatId/messages", async (req, res) => {
-  const mensaje = await sendMessage(req, res);
-
-  const chatParticipants = await getChatParticipants(req.params.chatId);
-  for (const u of chatParticipants) {
-    if (u !== mensaje.idAutor) {
-      await addNotification(
-        u,
-        "mensaje",
-        req.params.chatId,
-        `Nuevo mensaje de ${mensaje.idAutor}`
-      );
-    }
-  }
-
-  res.status(201).json(mensaje);
-});
-
-/* Obtener mensajes de un chat
-Uso
-GET /chats/abc123/messages */
-app.get("/chats/:chatId/messages", getMessages);
-
-/* Obtener todos los chats de un usuario
-//Uso
-//GET /users/u123/chats */
-app.get("/users/:userId/chats", getUserChats);
-
-/* 
-  Se suele usar este flujo
-  - Cuando se crea un nuevo chat se invoca a create, esto solo se hace una vez
-  - Luego para enviar un mensaje se ocupa el chat id
-  - El chatId esta en redis con el key del id del usuario, llamando a /chats se pueden obtener todos los id
-  - Luego cuando se entra a un chat, se usa el chatId y se llama a /messages para jalar todos los mensajes
-*/
 
 app.use(updateRouter);
 app.use(datasetApproved);
