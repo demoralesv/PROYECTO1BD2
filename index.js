@@ -1199,16 +1199,16 @@ app.post("/api/datasets/:id/clone", verifyToken, async (req, res) => {
   let newDsSaved = null;
 
   try {
-    // 1) Load source dataset
+    // Cargar dataset
     const src = await findDatasetByAnyId(id);
     if (!src) return res.status(404).json({ error: "dataset not found" });
 
-    // 2) Ownership check
+    // Revisar dueño
     if (String(src.owner?._id || src.owner) !== String(req.userId)) {
       return res.status(403).json({ error: "only the owner can clone" });
     }
 
-    // 3) Create the new dataset in Mongo
+    // Crear dataset en Mongo
     const now = new Date();
     const dst = new Dataset({
       owner: src.owner,
@@ -1226,7 +1226,7 @@ app.post("/api/datasets/:id/clone", verifyToken, async (req, res) => {
     await dst.save();
     newDsSaved = dst;
 
-    // 4) Neo4j node
+    // Crear nodo en Neo4j
     const neoParams = {
       id: dst._id.toString(),
       userId: (src.owner?._id || src.owner).toString(),
@@ -1252,7 +1252,7 @@ app.post("/api/datasets/:id/clone", verifyToken, async (req, res) => {
       )
     );
 
-    // 5) Duplicate assets in Cassandra to match your table definition
+    // Duplicar archivos y videos en Cassandra
     const srcUUID = cassTypes.Uuid.fromString(
       objectIdToUuid(src._id.toString())
     );
@@ -1260,7 +1260,6 @@ app.post("/api/datasets/:id/clone", verifyToken, async (req, res) => {
       objectIdToUuid(dst._id.toString())
     );
 
-    // Only the columns that actually exist in `files`
     const qSelect =
       "SELECT id, kind, name, creation_date, amount_of_bytes, blob_data FROM files WHERE dataset_id = ?";
 
@@ -1273,8 +1272,8 @@ app.post("/api/datasets/:id/clone", verifyToken, async (req, res) => {
     });
 
     for (const r of rows.rows) {
-      const newAssetId = cassTypes.TimeUuid.now(); // new TIMEUUID for the clone
-      const createdAt = r.creation_date || new Date(); // keep original if present
+      const newAssetId = cassTypes.TimeUuid.now();
+      const createdAt = r.creation_date || new Date();
 
       await cassandraClient.execute(
         qInsert,
@@ -1285,13 +1284,13 @@ app.post("/api/datasets/:id/clone", verifyToken, async (req, res) => {
           r.name,
           createdAt,
           r.amount_of_bytes,
-          r.blob_data, // Buffer/BLOB as stored
+          r.blob_data,
         ],
         { prepare: true }
       );
     }
 
-    // 6) Done
+    // Guardar
     return res.json({
       _id: dst._id,
       id: dst._id,
@@ -1324,32 +1323,11 @@ app.post("/api/datasets/:id/clone", verifyToken, async (req, res) => {
 });
 
 // publicar un comentario
-app.post("/posts/:postId/comments", async (req, res) => {
-  try {
-    const comentario = await postComment(req, res); // tu función ya existente devuelve el comentario creado
-
-    // Aquí agregamos la notificación si el comentario no es del dueño del post
-    const postOwnerId = "usuarioPropietarioDelPost"; // Estoy hay que ver de donde se saca
-    if (comentario.idAutor !== postOwnerId) {
-      await addNotification(
-        postOwnerId,
-        "comentario",
-        req.params.postId,
-        `${comentario.idAutor} comentó en tu post`
-      );
-    }
-
-    res.status(201).json(comentario);
-  } catch (err) {
-    console.error(err);
-    res.status(500).json({ error: "Internal server error" });
-  }
-});
+app.post("/posts/:postId/comments", postComment);
 // borrar un comentario
 app.delete("/posts/:postId/comments/:commentId", deleteComment);
 // obtener los comentarios
 app.get("/posts/:postId/comments", getComments);
-
 
 app.use(updateRouter);
 app.use(datasetApproved);
@@ -1360,7 +1338,7 @@ app.use("/admin", adminRoutes);
 app.use("/admin", manageDatasets);
 app.use(startFollowing);
 app.use(badgesRouter);
-// Start server
+// Empezar el server
 app.listen(PORT, () => {
   console.log(`Server running at http://localhost:${PORT}`);
 });
