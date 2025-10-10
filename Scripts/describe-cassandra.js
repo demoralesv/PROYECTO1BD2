@@ -33,6 +33,14 @@ async function main() {
   console.log("files columns:");
   cols.rows.forEach((r) => console.log(" -", r.column_name, r.type));
 
+  const cols2 = await cassandraClient.execute(
+    "SELECT column_name, type FROM system_schema.columns WHERE keyspace_name = ? AND table_name = ?",
+    [KS, "chat_assets"],
+    { prepare: true }
+  );
+  console.log("chat_assets columns:");
+  cols2.rows.forEach((r) => console.log(" -", r.column_name, r.type));
+
   await cassandraClient.shutdown();
 }
 main().catch((e) => {

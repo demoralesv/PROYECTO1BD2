@@ -27,18 +27,33 @@ export async function initCassandra() {
   await cassandraClient.execute(`USE ${CASSANDRA_KEYSPACE}`);
 
   // Tabla de archivos y videos
+  // Tabla de videos e imágenes en chats
   await cassandraClient.execute(`
-    CREATE TABLE IF NOT EXISTS files (
-      dataset_id UUID,
-      id TIMEUUID,
-      kind TEXT,
-      name TEXT,
-      creation_date TIMESTAMP,
-      amount_of_bytes BIGINT,
-      blob_data BLOB,
-      PRIMARY KEY ((dataset_id), id)
-    ) WITH CLUSTERING ORDER BY (id ASC);
-  `);
+  CREATE TABLE IF NOT EXISTS files (
+    dataset_id uuid,
+    id timeuuid,
+    kind text,
+    name text,
+    creation_date timestamp,
+    amount_of_bytes bigint,
+    blob_data blob,
+    PRIMARY KEY ((dataset_id), id)
+  ) WITH CLUSTERING ORDER BY (id ASC)
+`);
+
+  await cassandraClient.execute(`
+  CREATE TABLE IF NOT EXISTS chat_assets (
+    chat_id text,
+    id timeuuid,
+    kind text,
+    name text,
+    content_type text,
+    bytes bigint,
+    blob_data blob,
+    created_at timestamp,
+    PRIMARY KEY ((chat_id), id)
+  ) WITH CLUSTERING ORDER BY (id ASC)
+`);
 
   console.log("✅ Cassandra connected and keyspace ready");
 }

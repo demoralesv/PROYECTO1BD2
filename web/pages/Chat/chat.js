@@ -105,6 +105,8 @@ const chatPage = () => {
         <div id="messages" class="messages"></div>
         <div style="border-top:1px solid var(--line); padding:10px; display:flex; gap:8px; align-items:center">
           <textarea id="inputMsg" class="input" placeholder="Message"></textarea>
+          <input id="filePicker" type="file" multiple accept="image/*,video/*" style="display:none"/>
+          <button id="btnAttach" class="btn">📎</button>
           <button id="btnSend" class="btn primary">Send</button>
           <span class="muted">Enter</span>
         </div>
@@ -156,7 +158,8 @@ const chatPage = () => {
     const searchInput= document.getElementById('searchInput');
     const newChatBtn = document.getElementById('newChatBtn');
 
-    let state = { chats: [], currentChatId: null, currentPeer: null };
+    let state = { chats: [], currentChatId: null, currentPeer: null, canWrite: true,
+    messages: [], pendingFiles: [] };
 
     newChatBtn.onclick = async () => {
       const uname = (prompt("Start chat with username:") || "").trim();
@@ -179,6 +182,13 @@ const chatPage = () => {
       if (!res.ok) throw new Error(data.error || "Cannot load chats");
       state.chats = data.chats || [];
       renderList(searchInput.value || "");
+    }
+
+    async function authSrc(url) {
+      const r = await fetch(url, { headers: { "Authorization": "Bearer " + token }});
+      if (!r.ok) throw new Error("asset fetch failed");
+      const b = await r.blob();
+      return URL.createObjectURL(b);
     }
 
     function renderList(filter=""){
@@ -221,15 +231,23 @@ const chatPage = () => {
 
       // Que no se pueda escribir
       const inputRow = document.querySelector('#btnSend').parentElement;
+
       if (state.canWrite) {
         inputRow.style.opacity = "1";
-        document.getElementById('btnSend').disabled = false;
-        document.getElementById('inputMsg').disabled = false;
+        inputMsg.disabled = false;
+        btnSend.disabled = false;
+        btnAttach.disabled = false;
+        filePicker.disabled = false;
+        inputMsg.placeholder = "Message";
       } else {
         inputRow.style.opacity = ".6";
-        document.getElementById('btnSend').disabled = true;
-        document.getElementById('inputMsg').disabled = true;
-        document.getElementById('inputMsg').placeholder = "Read-only system thread";
+        inputMsg.disabled = true;
+        btnSend.disabled = true;
+        btnAttach.disabled = true;
+        filePicker.disabled = true;
+        inputMsg.placeholder = "Read-only system thread";
+        state.pendingFiles = [];
+        renderAttachStrip();
       }
 
       await loadMessages();
@@ -252,106 +270,204 @@ const chatPage = () => {
 
 
     function renderMessages(list){
-  
-    list = Array.isArray(list) ? list.filter(Boolean) : [];
-    messagesEl.innerHTML = "";
+      list = Array.isArray(list) ? list.filter(Boolean) : [];
+      messagesEl.innerHTML = "";
+      const me = getIdentity();
+      let lastSenderKey = null;
 
-    const me = getIdentity();  
-    let lastSenderKey = null;
+      list.forEach(m => {
+        const text  = (m && (m.mensaje || m.texto || "")).trim();
+        const fecha = (m && m.fecha) || Date.now();
+        const mine  = isMine(m || {}, me);
+        const senderKey = mine ? "me:"+(me.id||me.username||"")
+                              : "them:"+(m?.userId||m?.idAutor||m?.username||m?.authorUsername||"?");
 
-    list.forEach(m => {
-  
-      const text = (m && (m.mensaje || m.texto || "")).trim();
-      const fecha = (m && m.fecha) || Date.now();
-      const mine  = isMine(m || {}, me);
+        const row = document.createElement("div");
+        row.className = "msg " + (mine ? "me" : "them");
 
-      const senderKey = mine
-        ? "me:" + (me.id || me.username || "")
-        : "them:" + (m?.userId || m?.idAutor || m?.username || m?.authorUsername || "?");
+        const stack = document.createElement("div");
+        stack.className = "stack";
 
-      const row = document.createElement("div");
-      row.className = "msg " + (mine ? "me" : "them");
+        if (text) {
+          const bubble = document.createElement("div");
+          bubble.className = "bubble";
+          bubble.textContent = text;
+          stack.appendChild(bubble);
+        }
 
-      const stack = document.createElement("div");
-      stack.className = "stack";
+        // Videos, archivos e imágenes
+        const atts = Array.isArray(m.attachments) ? m.attachments : [];
+        atts.forEach(a => {
+          const kind = (a.kind||"file");
+          const url  = a.url || "";
+          if (!url) return;
 
-      const bubble = document.createElement("div");
-      bubble.className = "bubble";
-      bubble.textContent = text;
+          if (kind === "image") {
+            const img = document.createElement("img");
+            img.src = url;
+            img.alt = a.name || "";
+            img.style.maxWidth = "320px";
+            img.style.borderRadius = "12px";
+            img.style.border = "1px solid #2a3340";
+            stack.appendChild(img);
+            authSrc(url).then(u => img.src = u).catch(()=> img.alt = "(failed)");
+          } else if (kind === "video") {
+            const vid = document.createElement("video");
+            vid.src = url;
+            vid.controls = true;
+            vid.style.maxWidth = "340px";
+            vid.style.borderRadius = "12px";
+            vid.style.border = "1px solid #2a3340";
+            stack.appendChild(vid);
+            authSrc(url).then(u => vid.src = u).catch(()=> {});
+          } else {
+            const aEl = document.createElement("a");
+            aEl.href = url;
+            aEl.className = "btn sm";
+            aEl.textContent = a.name || "Download";
+            aEl.target = "_blank";
+            stack.appendChild(aEl);
+          }
+        });
 
-      const meta = document.createElement("div");
-      meta.className = "meta";
-      const who = mine ? "You" : (state.currentPeer?.username ? "@"+state.currentPeer.username : "Them");
-      const time = fmtTime(fecha);
-      meta.textContent = (senderKey !== lastSenderKey) ? (who + " • " + time) : time;
+        const meta = document.createElement("div");
+        meta.className = "meta";
+        const who = mine ? "You" : (state.currentPeer?.username ? "@"+state.currentPeer.username : "Them");
+        const time = fmtTime(fecha);
+        meta.textContent = (senderKey !== lastSenderKey) ? (who + " • " + time) : time;
 
-      stack.appendChild(bubble);
-      stack.appendChild(meta);
-      row.appendChild(stack);
-      messagesEl.appendChild(row);
-
-      lastSenderKey = senderKey;
-    });
-
-    messagesEl.scrollTop = messagesEl.scrollHeight;
-  }
-
-
-
-
-    btnSend.onclick = send;
-    inputMsg.addEventListener('keydown', (e) => {
-      if (e.key === 'Enter' && !e.shiftKey){ e.preventDefault(); send(); }
-    });
-
-    async function send(){
-    if (!state.canWrite) { 
-      alert("This thread is read-only."); 
-      return; 
-    }
-      
-    const txt = (inputMsg.value || "").trim();
-    if (!txt || !state.currentChatId) return;
-
-    const me = getIdentity();
-    const optimistic = {
-      userId: me.id || undefined,
-      username: me.username || undefined,
-      mensaje: txt,
-      fecha: Date.now()
-    };
-
-    // 1) UI optimista: agrega al estado y renderiza
-    state.messages = [...state.messages, optimistic];
-    renderMessages(state.messages);
-    inputMsg.value = "";
-
-    try {
-      const res = await fetch(API + "/api/chat/" + encodeURIComponent(state.currentChatId) + "/messages", {
-        method: "POST",
-        headers: {
-          "Authorization": "Bearer " + token,
-          "Content-Type": "application/json"
-        },
-        body: JSON.stringify({ mensaje: txt, username: me.username })
+        stack.appendChild(meta);
+        row.appendChild(stack);
+        messagesEl.appendChild(row);
+        lastSenderKey = senderKey;
       });
 
-      if (!res.ok) {
-        const err = await res.json().catch(()=> ({}));
-        throw new Error(err.error || "Send failed");
-      }
-
-      // 2) Re-sincroniza con servidor (por si hay normalización/ids)
-      await loadMessages();
-
-    } catch(e){
-      // (opcional) revertir último optimista si falla
-      state.messages.pop();
-      renderMessages(state.messages);
-      alert(e.message);
+      messagesEl.scrollTop = messagesEl.scrollHeight;
     }
-  }
 
+    const filePicker = document.getElementById('filePicker');
+    const btnAttach = document.getElementById('btnAttach');
+
+    const attachStrip = document.createElement('div');
+    attachStrip.style.display = 'flex';
+    attachStrip.style.gap = '8px';
+    attachStrip.style.flexWrap = 'wrap';
+    attachStrip.id = 'attachStrip';
+    document.querySelector('#btnSend').parentElement.insertBefore(attachStrip, document.querySelector('#btnSend'));
+
+    btnAttach.onclick = () => filePicker.click();
+
+    function renderAttachStrip(){
+      const strip = document.getElementById('attachStrip');
+      strip.style.display = state.canWrite ? 'flex' : 'none';
+      strip.innerHTML = '';
+      state.pendingFiles.forEach((f, idx) => {
+        const kind = f.type.startsWith('video/') ? 'video'
+                  : f.type.startsWith('image/') ? 'image' : 'file';
+
+        const wrap = document.createElement('div');
+        wrap.style.border = '1px solid #2a3340';
+        wrap.style.borderRadius = '8px';
+        wrap.style.padding = '4px';
+        wrap.style.display = 'flex';
+        wrap.style.alignItems = 'center';
+        wrap.style.gap = '6px';
+
+        if (kind === 'image') {
+          const img = document.createElement('img');
+          img.src = URL.createObjectURL(f);
+          img.style.width = '56px';
+          img.style.height = '40px';
+          img.style.objectFit = 'cover';
+          img.style.borderRadius = '6px';
+          wrap.appendChild(img);
+        } else if (kind === 'video') {
+          const v = document.createElement('div');
+          v.textContent = '🎞 ' + (f.name || 'video');
+          wrap.appendChild(v);
+        } else {
+          const a = document.createElement('div');
+          a.textContent = '📎 ' + (f.name || 'file');
+          wrap.appendChild(a);
+        }
+
+        const x = document.createElement('button');
+        x.textContent = '×';
+        x.className = 'btn sm';
+        x.onclick = () => {
+          state.pendingFiles.splice(idx, 1);
+          renderAttachStrip();
+        };
+        wrap.appendChild(x);
+
+        strip.appendChild(wrap);
+      });
+    }
+
+    filePicker.addEventListener('change', (e) => {
+      if (!state.canWrite) return;
+
+      const picked = Array.from(e.target.files || []);
+      if (!picked.length) return;
+
+      const key = f => [f.name, f.size, f.lastModified].join(':');
+      const current = new Set(state.pendingFiles.map(key));
+      picked.forEach(f => { if (!current.has(key(f))) state.pendingFiles.push(f); });
+
+      renderAttachStrip();
+
+      filePicker.value = '';
+    });
+
+    btnSend.onclick = send;
+      inputMsg.addEventListener('keydown', (e) => {
+        if (e.key === 'Enter' && !e.shiftKey){ e.preventDefault(); send(); }
+      });
+
+    async function send(){
+        if (!state.canWrite) { alert("This thread is read-only."); return; }
+        if (!state.currentChatId) return;
+
+        const txt = (inputMsg.value || "").trim();
+        const hasFiles = state.pendingFiles.length > 0;
+        if (!txt && !hasFiles) return;
+
+        btnSend.disabled = true;
+
+        try {
+          let assets = [];
+
+          if (hasFiles) {
+            const form = new FormData();
+            state.pendingFiles.forEach(f => form.append("files", f));
+            const upRes = await fetch(API + "/api/chat/" + encodeURIComponent(state.currentChatId) + "/media", {
+              method: "POST",
+              headers: { "Authorization":"Bearer " + token },
+              body: form
+            });
+            const upData = await upRes.json().catch(()=> ({}));
+            if (!upRes.ok) throw new Error(upData.error || "Upload failed");
+            assets = upData.assets || [];
+          }
+
+          const res = await fetch(API + "/api/chat/" + encodeURIComponent(state.currentChatId) + "/messages", {
+            method: "POST",
+            headers: { "Authorization": "Bearer " + token, "Content-Type": "application/json" },
+            body: JSON.stringify({ mensaje: txt, attachments: assets })
+          });
+          const data = await res.json().catch(()=> ({}));
+          if (!res.ok) throw new Error(data.error || "Send failed");
+
+          inputMsg.value = "";
+          state.pendingFiles = [];
+          renderAttachStrip();
+          await loadMessages();
+        } catch(e){
+          alert(e.message);
+        } finally {
+          btnSend.disabled = false;
+        }
+    }
 
     function getUserId(){
       try{

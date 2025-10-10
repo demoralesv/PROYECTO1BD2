@@ -6,6 +6,7 @@ import redisClient from "../databases/redis.js";
 import { randomUUID } from "crypto";
 import { getMessages } from "./chatGetMessages.js";
 import { sendMessage as sendMsgAppend } from "./chatSendMessage.js";
+import { uploadChatMedia, streamChatAsset } from "./chatMedia.js";
 
 const router = Router();
 
@@ -180,5 +181,9 @@ router.post("/api/chat/:chatId/messages", verifyToken, async (req, res) => {
     res.status(500).json({ error: "Internal server error" });
   }
 });
+
+router.post("/api/chat/:chatId/media", ...uploadChatMedia);
+
+router.get("/api/chat/:chatId/assets/:id", ...streamChatAsset);
 
 export default router;
