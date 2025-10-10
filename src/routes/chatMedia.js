@@ -3,7 +3,6 @@ import { cassandraClient } from "../databases/cassandra.js";
 import { types as cassTypes } from "cassandra-driver";
 import { verifyToken } from "./auth.routes.js";
 import jwt from "jsonwebtoken";
-const ASSET_JWT_SECRET = process.env.ASSET_JWT_SECRET;
 
 const upload = multer({
   storage: multer.memoryStorage(),
@@ -50,12 +49,9 @@ export const uploadChatMedia = [
         INSERT INTO chat_assets (chat_id, id, kind, name, content_type, bytes, blob_data, created_at)
         VALUES (?, ?, ?, ?, ?, ?, ?, toTimestamp(now()))
       `;
-        const payload = { cid: chatId, aid: id.toString() };
-        const token = jwt.sign(payload, ASSET_JWT_SECRET, { expiresIn: "10m" });
-        const url = `/api/chat/${encodeURIComponent(chatId)}/assets/${id.toString()}?a=${encodeURIComponent(token)}`;
-        saved.push({ id: id.toString(), kind, contentType: ct, name: f.originalname, url });
-        const saved = [];
-    for (const f of files) {
+
+      const saved = [];
+      for (const f of files) {
         const ct = f.mimetype || "application/octet-stream";
         const kind = detectKind(ct);
 
