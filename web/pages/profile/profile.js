@@ -308,9 +308,9 @@ const profile = () => {
           function num(x){
             if (x == null) return 0;
             if (typeof x === "number") return x;
-            if (typeof x.toNumber === "function") return x.toNumber(); // neo4j-int
-            if (typeof x.low === "number") return x.low;               // neo4j {low,high}
-            if (typeof x.count === "number") return x.count;           // {count:n}
+            if (typeof x.toNumber === "function") return x.toNumber(); 
+            if (typeof x.low === "number") return x.low;               
+            if (typeof x.count === "number") return x.count;           
             const n = Number(x);
             return Number.isFinite(n) ? n : 0;
           }

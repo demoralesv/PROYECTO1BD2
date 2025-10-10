@@ -111,7 +111,6 @@ const downloadsPage = () => {
     }
     function datasetIdFromPath(){
       var parts = location.pathname.split("/");
-      // expects /datasets/:id/downloads
       return parts[2] || "";
     }
 
@@ -144,7 +143,7 @@ const downloadsPage = () => {
     // Load table
     function load(page){
       setText("status", "Loading…");
-      var p = Math.max(0, ((page ?? 1) - 1)); // convert 1-based UI to 0-based API
+      var p = Math.max(0, ((page ?? 1) - 1)); 
       apiGet("/api/datasets/" + encodeURIComponent(dsId) + "/downloads?page=" + p + "&size=50")
         .then(function(data){
           setText("status", "");

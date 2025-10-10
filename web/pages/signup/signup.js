@@ -61,7 +61,7 @@ const signup = () => {
             window.location.href = "/";
           }, 1200);
           
-          // localStorage.setItem("token", data.token);
+          
         } catch(e) {
           setMsg("su_msg", e.message);
         }
