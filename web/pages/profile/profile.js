@@ -126,7 +126,7 @@ const profile = () => {
 
         <div class="top-actions">
           <a id="btnMessages" class="btn badge-wrap">
-            📨
+            &#9993;
             <span id="msgBadge" class="badge" style="display:none"></span>
           </a>
           <button id="btnHome" class="btn icon" title="Home">🏠</button>
