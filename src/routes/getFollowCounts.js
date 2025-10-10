@@ -1,12 +1,12 @@
-// neo-follow-counts.js
+
 import driver from "../databases/neo4j.js";
 
 // Normaliza posibles enteros de Neo4j a número JS
 const toNum = (v) => {
   if (v == null) return 0;
   if (typeof v === "number") return v;
-  if (typeof v.toNumber === "function") return v.toNumber(); // neo4j-int
-  if (typeof v.low === "number") return v.low;               // neo4j-int {low,high}
+  if (typeof v.toNumber === "function") return v.toNumber(); 
+  if (typeof v.low === "number") return v.low;               
   const n = Number(v);
   return Number.isFinite(n) ? n : 0;
 };

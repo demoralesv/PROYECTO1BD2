@@ -14,10 +14,7 @@ function keyToId(chatKey) {
   return (chatKey || "").replace(/^chat:/, "");
 }
 
-/**
- * Create or reuse a 1:1 chat with a target username.
- * POST /api/chat/start/:username
- */
+
 router.post("/api/chat/start/:username", verifyToken, async (req, res) => {
   try {
     const me = await User.findById(req.userId, {
@@ -77,10 +74,7 @@ router.post("/api/chat/start/:username", verifyToken, async (req, res) => {
   }
 });
 
-/**
- * List my chats (with peer info)
- * GET /api/chat
- */
+
 router.get("/api/chat", verifyToken, async (req, res) => {
   try {
     const chatKeys = await redisClient.lRange(
@@ -146,19 +140,12 @@ router.get("/api/chat", verifyToken, async (req, res) => {
   }
 });
 
-/**
- * Get messages of a chat
- * GET /api/chat/:chatId/messages
- */
+
 router.get("/api/chat/:chatId/messages", verifyToken, async (req, res) => {
   return getMessages(req, res);
 });
 
-/**
- * Send message to a chat
- * POST /api/chat/:chatId/messages
- * body: { mensaje: string }
- */
+
 router.post("/api/chat/:chatId/messages", verifyToken, async (req, res) => {
   try {
     const { chatId } = req.params;
